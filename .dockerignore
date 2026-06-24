@@ -1,0 +1,24 @@
+# Keep the Cloud Build context small and free of secrets / local cruft.
+.git/
+.gitignore
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+
+# Secrets — never ship into the image (set env vars on Cloud Run instead).
+.env
+.env.*
+!.env.example
+
+# Not needed at runtime
+scripts/
+*.bak
+.vscode/
+.idea/
+.DS_Store

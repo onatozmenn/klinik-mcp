@@ -1,0 +1,10 @@
+{
+  "meta": {
+    "source": "",
+    "version": "",
+    "currency": "TRY",
+    "sample": false,
+    "note": "Fiyat verisi yok. Gerçek barkod→TL fiyatı için: scripts/build_prices.py ile ticari/eczane bir dışa aktarımı (Rxmediapharma / eczane otomasyonu / ticari CSV) işleyin."
+  },
+  "prices": {}
+}

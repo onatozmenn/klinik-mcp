@@ -34,6 +34,9 @@ pinned: false
 
 ## Araçlar (Tools)
 
+<details>
+<summary><b>19 araç — tam listeyi açmak için tıkla</b></summary>
+
 | Araç | Açıklama | Kaynak |
 | --- | --- | --- |
 | `search_drugs` | İlaç adıyla (yanlış yazımlar dâhil) arama, RxCUI çözümleme | RxNorm |
@@ -55,6 +58,8 @@ pinned: false
 | `find_drugs_by_active_ingredient` | Aynı ATC (etkin madde) ilaçlar | TİTCK SKRS |
 | `get_drug_safety_status` | Ek izleme (▼) + ruhsat iptali | TİTCK |
 | `get_drug_price` | TL fiyat (perakende/depocu) | Ticari export |
+
+</details>
 
 ## 🚀 Bağlama (kurulum gerekmez)
 
@@ -99,7 +104,8 @@ npx -y @smithery/cli install onatozmen44/klinik-mcp --client claude
 
 ---
 
-## 🛠️ Yerel geliştirme (opsiyonel)
+<details>
+<summary><b>🛠️ Yerel geliştirme (kendi makinende çalıştır)</b></summary>
 
 Kendi makinende çalıştırmak veya katkıda bulunmak istersen:
 
@@ -126,13 +132,18 @@ Araçları tarayıcıda denemek (MCP Inspector):
 npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe -m health_mcp
 ```
 
-## Veri kaynakları
+</details>
+
+<details>
+<summary><b>📚 Veri kaynakları, güncelleme & gelişmiş kullanım</b></summary>
+
+### Veri kaynakları
 
 - **openFDA** — https://open.fda.gov/apis/ (ilaç etiketleri, yan etkiler, geri çağırmalar)
 - **NLM RxNorm / RxNav / RxClass** — https://rxnav.nlm.nih.gov/ (ilaç terminolojisi ve sınıfları)
 - **PubMed (NCBI E-utilities)** — https://www.ncbi.nlm.nih.gov/books/NBK25500/ (tıbbi literatür)
 
-## 🇹🇷 Türkiye verisi (SGK EK-4/A — tam liste)
+### 🇹🇷 Türkiye verisi (SGK EK-4/A — tam liste)
 
 `find_drug_equivalents` ve `get_reimbursement_status` araçları, SGK'nın **tam**
 "Bedeli Ödenecek İlaçlar Listesi (EK-4/A)"sını okur (~8.000 ilaç: **eşdeğer grup,
@@ -154,7 +165,7 @@ Manuel güncelleme (zip'ten çıkardığın EK-4/A ile):
 .\.venv\Scripts\python.exe scripts/build_sgk_snapshot.py "C:\yol\EK-4A.xlsx" --version "2026"
 ```
 
-## 🇹🇷 Tam ilaç kaydı (TİTCK SKRS)
+### 🇹🇷 Tam ilaç kaydı (TİTCK SKRS)
 
 `search_turkish_drugs`, `get_turkish_drug_info` ve
 `find_drugs_by_active_ingredient` araçları, TITCK SKRS E-Reçete listesinin **tüm
@@ -173,7 +184,7 @@ Listeyi güncellemek için:
 .\.venv\Scripts\python.exe scripts/build_titck_snapshot.py "C:\yol\skrs.xlsx" --version 2026-06-23
 ```
 
-## 🛡️ TİTCK güvenlik durumu (ek izleme + ruhsat iptali)
+### 🛡️ TİTCK güvenlik durumu (ek izleme + ruhsat iptali)
 
 `get_drug_safety_status` aracı ve `get_turkish_drug_info` içindeki uyarı
 satırları, iki resmî TİTCK listesini okur
@@ -194,7 +205,7 @@ Listeyi güncellemek için en güncel `.xlsx`'leri indirip:
 
 veya tek komutla otomatik (aşağıdaki `scripts/update_data.py` bunu da çeker).
 
-## 🔄 Otomatik güncelleme
+### 🔄 Otomatik güncelleme
 
 TİTCK listesi düzenli güncellenir. En güncel veriyi **tek komutla** çek:
 
@@ -212,7 +223,7 @@ Haftalık zamanlamak için (yolları kendine göre düzenle):
 schtasks /Create /SC WEEKLY /D MON /ST 03:00 /TN "health-mcp-update" /TR "C:\yol\.venv\Scripts\python.exe C:\yol\scripts\update_data.py"
 ```
 
-## 💰 TL fiyatı (takılabilir entegrasyon)
+### 💰 TL fiyatı (takılabilir entegrasyon)
 
 Net TL perakende fiyatı **ücretsiz/public olarak yok** (SGK EK-4/A iskonto oranı,
 TİTCK yalnızca EUR referans). Bu yüzden fiyat **takılabilir** bir kaynaktan gelir:
@@ -230,3 +241,5 @@ ticari CSV) **barkod + perakende fiyat** dışa aktarıp:
 
 Script barkod/perakende/depocu sütunlarını otomatik bulur (CSV veya Excel). Fiyat
 kaynağı yoksa araçlar fiyatı sessizce atlar.
+
+</details>

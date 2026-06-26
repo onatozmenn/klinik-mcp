@@ -10,10 +10,13 @@ pinned: false
 
 # Klinik MCP
 
-Bir **MCP (Model Context Protocol) sunucusu** — sağlık/ilaç sektörü için.
-Resmî, ücretsiz ve API anahtarı gerektirmeyen veri kaynaklarını (openFDA ve
-NLM RxNorm) büyük dil modellerine **araç (tool)** olarak açar. Hem **Claude
-Desktop** (stdio) hem de **ChatGPT** (HTTP connector) ile çalışır.
+Bir **MCP (Model Context Protocol) sunucusu** — Türk hekim ve eczacılar için.
+Resmî, ücretsiz ve çoğunlukla API anahtarı gerektirmeyen veri kaynaklarını
+— **TİTCK SKRS** ve **SGK EK-4/A** (Türkiye) ile **openFDA**, **NLM
+RxNorm/RxClass** ve **PubMed** (uluslararası) — büyük dil modellerine **araç
+(tool)** olarak açar; ayrıca klinik hesaplayıcılar (kreatinin klerensi, VYA,
+pediatrik doz) içerir. Hem **Claude Desktop** (stdio) hem de **ChatGPT** (HTTP
+connector) ile çalışır.
 
 > ⚠️ **Sorumluluk reddi:** Bu sunucunun sağladığı bilgiler yalnızca eğitim
 > amaçlıdır ve **tıbbi tavsiye değildir**. Tıbbi kararlar için mutlaka bir
@@ -75,8 +78,8 @@ python -m venv .venv
 ```json
 {
   "mcpServers": {
-    "health": {
-      "command": "C:\\Users\\onat\\OneDrive\\Desktop\\openthing\\.venv\\Scripts\\python.exe",
+    "klinik": {
+      "command": "C:\\Users\\onat\\OneDrive\\Desktop\\KlinikMCP\\.venv\\Scripts\\python.exe",
       "args": ["-m", "health_mcp"]
     }
   }

@@ -43,14 +43,17 @@ def detect_columns(headers: list[str]) -> dict[str, int]:
         h = norm(header)
         if "barcode" not in mapping and "BARKOD" in h:
             mapping["barcode"] = idx
-        elif "retail" not in mapping and (
-            "PERAKENDE" in h or "PSF" in h or "KDV" in h
-        ):
-            mapping["retail"] = idx
+        # Detect depot first; a "DEPOCU ... KDV" column must not be read as retail.
         elif "depot" not in mapping and (
             "DEPOCU" in h or "DSF" in h or ("DEPO" in h and "FIYAT" in h)
         ):
             mapping["depot"] = idx
+        elif (
+            "retail" not in mapping
+            and "DEPO" not in h
+            and ("PERAKENDE" in h or "PSF" in h or "KDV" in h)
+        ):
+            mapping["retail"] = idx
     return mapping
 
 

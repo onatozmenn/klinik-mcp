@@ -16,13 +16,18 @@ from .clients.http import APIError
 mcp = FastMCP(
     name="Klinik MCP",
     instructions=(
-        "Tools for looking up drug and medication information from official US "
-        "public data sources (openFDA drug labels & adverse events, and the NLM "
-        "RxNorm terminology). Use them to search drugs, read label sections "
-        "(indications, dosage, warnings, interactions), review reported adverse "
-        "events and recalls, and normalize drug names. The data is educational "
-        "only and is NOT medical advice; always advise consulting a qualified "
-        "healthcare professional."
+        "Klinik MCP — drug & clinical information tools for Turkish physicians "
+        "and pharmacists. Capabilities: (1) openFDA drug labels, adverse events "
+        "(FAERS) and recalls, plus condition\u2192drug reverse lookup; (2) NLM "
+        "RxNorm/RxClass for name normalization, ingredients/brands and "
+        "therapeutic/ATC/mechanism classes; (3) PubMed medical-literature "
+        "search; (4) clinical calculators (Cockcroft\u2013Gault creatinine "
+        "clearance, Mosteller body-surface-area, weight-based pediatric dose); "
+        "(5) Turkey-specific data \u2014 T\u0130TCK SKRS drug registry (search by "
+        "name, full info, drugs sharing an ATC code), SGK EK-4/A bioequivalents "
+        "& reimbursement status, and TL prices when a price source is loaded. "
+        "Replies are in Turkish. All data is educational only and is NOT medical "
+        "advice; always advise consulting a qualified healthcare professional."
     ),
 )
 
@@ -407,7 +412,13 @@ def creatinine_clearance(
     sex: "kadın"/"female"/"f" or "erkek"/"male"/"m".
     serum_creatinine_mg_dl: serum creatinine in mg/dL.
     """
-    is_female = str(sex).strip().lower()[:1] in {"k", "f", "w"}
+    initial = str(sex).strip().lower()[:1]
+    if initial not in {"k", "f", "w", "e", "m"}:
+        return (
+            "Geçersiz girdi: cinsiyet 'kadın'/'erkek' (veya female/male) olarak "
+            "belirtilmeli."
+        )
+    is_female = initial in {"k", "f", "w"}
     try:
         crcl = clinical.cockcroft_gault(age, weight_kg, serum_creatinine_mg_dl, is_female)
     except ValueError as exc:

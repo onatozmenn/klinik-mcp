@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 
 from fastmcp import FastMCP
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 from . import clinical, prices, safety, sgk, titck
 from .clients import openfda, pubmed, rxnorm
@@ -802,3 +804,37 @@ def get_drug_price(query: str) -> str:
     if entry.get("depot") is not None:
         lines.append(f"- **Depocu satış:** {entry['depot']:.2f} TL")
     return "\n".join(lines) + _price_disclaimer()
+
+
+# --------------------------------------------------------------------------- #
+# Discovery: static MCP server card. Registries (e.g. Smithery) read this when
+# live scanning is blocked. Served at /.well-known/mcp/server-card.json on the
+# HTTP transport.
+# --------------------------------------------------------------------------- #
+SERVER_CARD = {
+    "serverInfo": {"name": "Klinik MCP", "version": "0.1.0"},
+    "authentication": {"required": False},
+}
+
+
+async def _server_card(request: Request) -> JSONResponse:
+    """Return the static MCP server card (serverInfo + tool summary)."""
+    card = dict(SERVER_CARD)
+    try:
+        tools = await mcp.list_tools()
+        card["tools"] = sorted(
+            (
+                {
+                    "name": tool.name,
+                    "description": (getattr(tool, "description", "") or "").strip(),
+                }
+                for tool in tools
+            ),
+            key=lambda item: item["name"],
+        )
+    except Exception:  # registry card must stay valid even if introspection fails
+        pass
+    return JSONResponse(card)
+
+
+mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])(_server_card)

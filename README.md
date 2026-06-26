@@ -8,15 +8,25 @@ app_port: 8080
 pinned: false
 ---
 
-# Klinik MCP
+<p align="center">
+  <img src="KlinikMCP.png" alt="Klinik MCP" width="140">
+</p>
 
-Bir **MCP (Model Context Protocol) sunucusu** — Türk hekim ve eczacılar için.
-Resmî, ücretsiz ve çoğunlukla API anahtarı gerektirmeyen veri kaynaklarını
-— **TİTCK SKRS** ve **SGK EK-4/A** (Türkiye) ile **openFDA**, **NLM
-RxNorm/RxClass** ve **PubMed** (uluslararası) — büyük dil modellerine **araç
-(tool)** olarak açar; ayrıca klinik hesaplayıcılar (kreatinin klerensi, VYA,
-pediatrik doz) içerir. Hem **Claude Desktop** (stdio) hem de **ChatGPT** (HTTP
-connector) ile çalışır.
+<h1 align="center">Klinik MCP</h1>
+
+<p align="center">
+  <b>Türk hekim ve eczacılar için ilaç &amp; klinik bilgi MCP sunucusu.</b><br>
+  TİTCK · SGK EK-4/A · openFDA · NLM RxNorm/RxClass · PubMed — tek araç setinde;
+  Claude ve ChatGPT ile çalışır.
+</p>
+
+<p align="center">
+  <a href="https://smithery.ai/server/onatozmen44/klinik-mcp"><img alt="Smithery" src="https://img.shields.io/badge/Smithery-listed-ea580c"></a>
+  <a href="https://github.com/onatozmenn/klinik-mcp"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-source-181717?logo=github"></a>
+  <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-22c55e"></a>
+  <img alt="MCP" src="https://img.shields.io/badge/MCP-stdio%20%7C%20HTTP-2563eb">
+  <img alt="Python" src="https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white">
+</p>
 
 > ⚠️ **Sorumluluk reddi:** Bu sunucunun sağladığı bilgiler yalnızca eğitim
 > amaçlıdır ve **tıbbi tavsiye değildir**. Tıbbi kararlar için mutlaka bir
@@ -46,61 +56,71 @@ connector) ile çalışır.
 | `get_drug_safety_status` | Ek izleme (▼) + ruhsat iptali | TİTCK |
 | `get_drug_price` | TL fiyat (perakende/depocu) | Ticari export |
 
-## Kurulum
+## 🚀 Bağlama (kurulum gerekmez)
 
-```powershell
-# Proje klasöründe
-python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install -e .
-```
+Sunucu **yayında** (HuggingFace Spaces + Smithery) — çoğu kullanıcı için hiçbir
+kurulum gerekmez. İstemcini seç:
 
-İsteğe bağlı olarak `.env.example` dosyasını `.env` olarak kopyalayıp
-`OPENFDA_API_KEY` girerek hız limitlerini yükseltebilirsiniz (gerekli değildir).
+### ChatGPT
 
-## Çalıştırma
+1. ChatGPT → **Settings → Connectors → Advanced → Developer mode**'u aç.
+2. **Add connector** de ve MCP URL'sini gir:
+   ```
+   https://onatozmenn-klinik-mcp.hf.space/mcp
+   ```
+3. Kaydet. Artık sohbette _“parol muadili nedir, en ucuzu hangisi?”_ gibi sorabilirsin.
 
-**stdio (yerel istemciler / Claude Desktop):**
+> Not: Özel MCP araçları yalnızca **Developer mode** açık hesaplarda görünür.
 
-```powershell
-.\.venv\Scripts\python.exe -m health_mcp
-```
+### Claude Desktop
 
-**HTTP (ChatGPT connector / uzak istemciler):**
-
-```powershell
-.\.venv\Scripts\python.exe -m health_mcp --transport http --port 8000
-```
-
-## Claude Desktop'a bağlama
-
-`claude_desktop_config.json` dosyasına ekleyin
-(Windows: `%APPDATA%\Claude\claude_desktop_config.json`):
+`claude_desktop_config.json` dosyasına ekle (Windows:
+`%APPDATA%\Claude\claude_desktop_config.json` · macOS:
+`~/Library/Application Support/Claude/claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "klinik": {
-      "command": "C:\\Users\\onat\\OneDrive\\Desktop\\KlinikMCP\\.venv\\Scripts\\python.exe",
-      "args": ["-m", "health_mcp"]
+      "command": "npx",
+      "args": ["-y", "mcp-remote", "https://onatozmenn-klinik-mcp.hf.space/mcp"]
     }
   }
 }
 ```
 
-Claude Desktop'ı yeniden başlatın; araçlar araç (🔨) menüsünde görünür.
+Claude Desktop'ı kapat-aç; araçlar 🔨 menüsünde görünür.
 
-## ChatGPT'ye bağlama
+### Smithery (tek komut)
 
-1. Sunucuyu HTTP modunda çalıştırın (yukarıdaki komut).
-2. Yerelse, dışarıya açmak için bir tünel kurun (ör. `ngrok http 8000`).
-3. ChatGPT → **Settings → Connectors → Advanced → Developer mode** açın.
-4. Yeni connector ekleyin ve MCP uç noktasını girin:
-   `https://<tünel-adresiniz>/mcp/`
+```powershell
+npx -y @smithery/cli install onatozmen44/klinik-mcp --client claude
+```
 
-> Not: ChatGPT'de özel MCP araçları, **Developer mode** (geliştirici modu)
-> etkin olan hesaplarda kullanılabilir.
+---
 
-## Test (MCP Inspector)
+## 🛠️ Yerel geliştirme (opsiyonel)
+
+Kendi makinende çalıştırmak veya katkıda bulunmak istersen:
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -e .
+
+# stdio (yerel Claude Desktop için):
+.\.venv\Scripts\python.exe -m health_mcp
+
+# HTTP (ChatGPT / uzak istemciler için):
+.\.venv\Scripts\python.exe -m health_mcp --transport http --port 8000
+```
+
+İsteğe bağlı: `.env.example`'ı `.env`'e kopyalayıp `OPENFDA_API_KEY` / `NCBI_API_KEY`
+girerek API hız limitlerini yükseltebilirsin (gerekli değil).
+
+Yereldeki stdio'yu Claude'a bağlamak istersen config'de `command`'i kendi
+`.venv\Scripts\python.exe` yoluna, `args`'ı `["-m", "health_mcp"]`'e ayarla.
+
+Araçları tarayıcıda denemek (MCP Inspector):
 
 ```powershell
 npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe -m health_mcp
@@ -153,7 +173,7 @@ Listeyi güncellemek için:
 .\.venv\Scripts\python.exe scripts/build_titck_snapshot.py "C:\yol\skrs.xlsx" --version 2026-06-23
 ```
 
-## �️ TİTCK güvenlik durumu (ek izleme + ruhsat iptali)
+## 🛡️ TİTCK güvenlik durumu (ek izleme + ruhsat iptali)
 
 `get_drug_safety_status` aracı ve `get_turkish_drug_info` içindeki uyarı
 satırları, iki resmî TİTCK listesini okur
@@ -174,7 +194,7 @@ Listeyi güncellemek için en güncel `.xlsx`'leri indirip:
 
 veya tek komutla otomatik (aşağıdaki `scripts/update_data.py` bunu da çeker).
 
-## �🔄 Otomatik güncelleme
+## 🔄 Otomatik güncelleme
 
 TİTCK listesi düzenli güncellenir. En güncel veriyi **tek komutla** çek:
 

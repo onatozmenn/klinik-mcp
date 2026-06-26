@@ -44,3 +44,17 @@ def test_sgk_zip_regex_matches_download_link(update_data):
     match = update_data.SGK_ZIP_RE.search(html)
     assert match is not None
     assert ".zip" in match.group(0)
+
+
+def test_titck_safety_xlsx_regex_matches_attachment(update_data):
+    html = (
+        'href="https://titck.gov.tr/storage/Archive/2025/'
+        'dynamicModulesAttachment/ekizlemlistesi19.12.25_abc.xlsx"'
+    )
+    matches = update_data.TITCK_SAFETY_XLSX_RE.findall(html)
+    assert matches and matches[0].endswith(".xlsx")
+
+
+def test_titck_safety_xlsx_regex_ignores_non_attachment(update_data):
+    html = 'href="https://titck.gov.tr/storage/other/document.xlsx"'
+    assert update_data.TITCK_SAFETY_XLSX_RE.findall(html) == []

@@ -44,6 +44,13 @@ SGK_DETAIL_RE = re.compile(
 )
 SGK_ZIP_RE = re.compile(r"/Download/DownloadFile\?f=[^\"'\s]+?\.zip[^\"'\s]*")
 
+TITCK_MONITORING_PAGE = "https://www.titck.gov.tr/dinamikmodul/57"  # Ek İzleme
+TITCK_CANCELLATION_PAGE = "https://www.titck.gov.tr/dinamikmodul/76"  # Ruhsat İptal
+TITCK_SAFETY_XLSX_RE = re.compile(
+    r"https://titck\.gov\.tr/storage/[^\"'\s]*dynamicModulesAttachment[^\"'\s]+?\.xlsx",
+    re.IGNORECASE,
+)
+
 
 def _download(url: str, suffix: str) -> str:
     with httpx.stream(
@@ -126,11 +133,46 @@ def update_sgk() -> None:
         Path(zip_path).unlink(missing_ok=True)
 
 
+def _latest_titck_xlsx(page_url: str) -> str | None:
+    page = httpx.get(page_url, headers=HEADERS, timeout=60, follow_redirects=True)
+    page.raise_for_status()
+    matches = TITCK_SAFETY_XLSX_RE.findall(page.text)
+    return matches[0] if matches else None
+
+
+def update_safety() -> None:
+    today = dt.date.today().isoformat()
+    monitoring = _latest_titck_xlsx(TITCK_MONITORING_PAGE)
+    cancellations = _latest_titck_xlsx(TITCK_CANCELLATION_PAGE)
+    if not monitoring and not cancellations:
+        print("! TİTCK güvenlik listeleri bulunamadı, atlanıyor.")
+        return
+    args = [sys.executable, str(SCRIPTS / "build_titck_safety_snapshot.py")]
+    temps: list[str] = []
+    try:
+        if monitoring:
+            print("TİTCK ek izleme:", monitoring)
+            path = _download(monitoring, ".xlsx")
+            temps.append(path)
+            args += ["--monitoring", path, "--monitoring-version", today]
+        if cancellations:
+            print("TİTCK ruhsat iptal:", cancellations)
+            path = _download(cancellations, ".xlsx")
+            temps.append(path)
+            args += ["--cancellations", path, "--cancellations-version", today]
+        subprocess.run(args, check=True)
+    finally:
+        for path in temps:
+            Path(path).unlink(missing_ok=True)
+
+
 def main() -> None:
     print("== TİTCK SKRS güncelleniyor ==")
     update_titck()
     print("\n== SGK EK-4/A güncelleniyor ==")
     update_sgk()
+    print("\n== TİTCK güvenlik listeleri güncelleniyor ==")
+    update_safety()
     print("\n✓ Tüm güncellemeler tamamlandı.")
 
 

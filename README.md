@@ -43,6 +43,7 @@ connector) ile çalışır.
 | `search_turkish_drugs` | Türk ilaç kaydı arama (ad) | TİTCK SKRS |
 | `get_turkish_drug_info` | İlaç bilgisi: ATC, firma, reçete türü | TİTCK SKRS |
 | `find_drugs_by_active_ingredient` | Aynı ATC (etkin madde) ilaçlar | TİTCK SKRS |
+| `get_drug_safety_status` | Ek izleme (▼) + ruhsat iptali | TİTCK |
 | `get_drug_price` | TL fiyat (perakende/depocu) | Ticari export |
 
 ## Kurulum
@@ -152,7 +153,28 @@ Listeyi güncellemek için:
 .\.venv\Scripts\python.exe scripts/build_titck_snapshot.py "C:\yol\skrs.xlsx" --version 2026-06-23
 ```
 
-## 🔄 Otomatik güncelleme
+## �️ TİTCK güvenlik durumu (ek izleme + ruhsat iptali)
+
+`get_drug_safety_status` aracı ve `get_turkish_drug_info` içindeki uyarı
+satırları, iki resmî TİTCK listesini okur
+([src/health_mcp/data/titck_safety.json](src/health_mcp/data/titck_safety.json)):
+
+- **Ek İzlemeye Tabi İlaçlar** (▼ kara üçgen) — TİTCK `dinamikmodul/57`
+- **Ruhsat İptal Listesi** — TİTCK `dinamikmodul/76`
+
+Eşleşme ilaç adı/etkin madde bazlıdır (ruhsat iptalinde barkod çoğu kayıtta
+boştur), bu yüzden ürün/sunum farkları için resmî listeden teyit edilmelidir.
+Listeyi güncellemek için en güncel `.xlsx`'leri indirip:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/build_titck_safety_snapshot.py `
+  --monitoring "C:\yol\ekizleme.xlsx" --cancellations "C:\yol\ruhsatiptal.xlsx" `
+  --monitoring-version 2025-12-19 --cancellations-version 2026-06-19
+```
+
+veya tek komutla otomatik (aşağıdaki `scripts/update_data.py` bunu da çeker).
+
+## �🔄 Otomatik güncelleme
 
 TİTCK listesi düzenli güncellenir. En güncel veriyi **tek komutla** çek:
 
@@ -160,8 +182,10 @@ TİTCK listesi düzenli güncellenir. En güncel veriyi **tek komutla** çek:
 .\.venv\Scripts\python.exe scripts/update_data.py
 ```
 
-Script hem **TİTCK SKRS** listesini (`titck_drugs.json`) hem SGK **tam EK-4/A**'yı
-(`sgk_ek4a.json`, konsolide SUT zip'inden) kendi bulup indirir ve yeniden üretir.
+Script **TİTCK SKRS** listesini (`titck_drugs.json`), SGK **tam EK-4/A**'yı
+(`sgk_ek4a.json`, konsolide SUT zip'inden) ve **TİTCK güvenlik listelerini**
+(`titck_safety.json`: ek izleme + ruhsat iptali) kendi bulup indirir ve yeniden
+üretir.
 Haftalık zamanlamak için (yolları kendine göre düzenle):
 
 ```powershell

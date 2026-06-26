@@ -9,7 +9,7 @@ import asyncio
 
 from fastmcp import FastMCP
 
-from . import clinical, prices, sgk, titck
+from . import clinical, prices, safety, sgk, titck
 from .clients import openfda, pubmed, rxnorm
 from .clients.http import APIError
 
@@ -24,8 +24,10 @@ mcp = FastMCP(
         "search; (4) clinical calculators (Cockcroft\u2013Gault creatinine "
         "clearance, Mosteller body-surface-area, weight-based pediatric dose); "
         "(5) Turkey-specific data \u2014 T\u0130TCK SKRS drug registry (search by "
-        "name, full info, drugs sharing an ATC code), SGK EK-4/A bioequivalents "
-        "& reimbursement status, and TL prices when a price source is loaded. "
+        "name, full info, drugs sharing an ATC code), T\u0130TCK safety status "
+        "(additional monitoring \u25bc and authorization cancellations), SGK "
+        "EK-4/A bioequivalents & reimbursement status, and TL prices when a "
+        "price source is loaded. "
         "Replies are in Turkish. All data is educational only and is NOT medical "
         "advice; always advise consulting a qualified healthcare professional."
     ),
@@ -641,6 +643,7 @@ def get_turkish_drug_info(query: str) -> str:
     if price is not None:
         suffix = " *(örnek)*" if prices.meta().get("sample") else ""
         lines.append(f"- **Perakende fiyat:** {price:.2f} TL{suffix}")
+    lines.extend(_safety_lines(drug))
     return "\n".join(lines) + _titck_disclaimer()
 
 
@@ -666,6 +669,90 @@ def find_drugs_by_active_ingredient(query: str, max_results: int = 30) -> str:
             f"| {member.get('prescription_type', '')} |"
         )
     return "\n".join(lines) + _titck_disclaimer()
+
+
+# --------------------------------------------------------------------------- #
+# Turkey-specific tools — TİTCK drug-safety status (additional monitoring +
+# authorization cancellations; see safety.py / build_titck_safety_snapshot.py)
+# --------------------------------------------------------------------------- #
+def _safety_disclaimer() -> str:
+    info = safety.meta()
+    parts = []
+    mon = info.get("monitoring", {})
+    can = info.get("cancellations", {})
+    if mon.get("count"):
+        parts.append(f"ek izleme {mon.get('version', '?')} ({mon.get('count')})")
+    if can.get("count"):
+        parts.append(f"ruhsat iptali {can.get('version', '?')} ({can.get('count')})")
+    source = "; ".join(parts) if parts else "TİTCK"
+    return (
+        f"\n\n---\n*Kaynak: TİTCK ({source}). Eşleşme ilaç adı/etkin madde "
+        "bazlıdır; ürün/sunum farkları için resmî güncel listeden teyit edin.*"
+    )
+
+
+def _safety_lines(drug: dict) -> list[str]:
+    """Compact safety flags for a resolved TİTCK drug (used inline in info)."""
+    lines: list[str] = []
+    if safety.monitoring_status(name=drug.get("name")):
+        lines.append(
+            "- **▼ Ek izleme:** Ek izlemeye tabi ilaç (advers etkileri TÜFAM'a bildirin)"
+        )
+    cancellations = safety.cancellation_status(
+        name=drug.get("name"), barcode=drug.get("barcode")
+    )
+    if cancellations:
+        lines.append(
+            f"- **⛔ Ruhsat iptali:** Bu ada ait {len(cancellations)} iptal kaydı "
+            "var (ürün/sunum bazında) — teyit edin"
+        )
+    return lines
+
+
+@mcp.tool
+def get_drug_safety_status(query: str) -> str:
+    """TİTCK güvenlik durumu: ek izleme (▼) ve ruhsat iptali. Ad veya barkod.
+
+    Reports whether a Turkish drug is on TİTCK's additional-monitoring list and
+    whether any authorization-cancellation record matches its name/barcode.
+    """
+    if not safety.available():
+        return (
+            "TİTCK güvenlik verisi yüklü değil. `scripts/build_titck_safety_"
+            "snapshot.py` ile ek izleme + ruhsat iptal listelerini yükleyin "
+            "(bkz. README)."
+        )
+    drug = titck.resolve(query)
+    name = drug.get("name") if drug else query
+    barcode = (
+        drug.get("barcode")
+        if drug
+        else (query.strip() if query.strip().isdigit() else None)
+    )
+    monitoring = safety.monitoring_status(name=name)
+    cancellations = safety.cancellation_status(name=name, barcode=barcode)
+    lines = [f"# {name} — TİTCK Güvenlik Durumu"]
+    if monitoring:
+        lines.append(
+            f"- **▼ Ek izlemeye tabi** (etkin madde: {monitoring.get('active', '?')}"
+            f", liste tarihi: {monitoring.get('date', '?')})"
+        )
+        lines.append(
+            "  Yakından izlenen ilaç; şüpheli advers etkileri TÜFAM'a bildirin."
+        )
+    else:
+        lines.append("- ▼ Ek izleme: kayıt bulunamadı")
+    if cancellations:
+        lines.append(
+            f"- **⛔ Ruhsat iptal kaydı: {len(cancellations)}** (ürün/sunum bazında)"
+        )
+        for record in cancellations[:10]:
+            when = record.get("cancel_date") or record.get("sheet", "")
+            holder = record.get("holder", "")
+            lines.append(f"  - {record.get('name', '?')} — {holder} ({when})")
+    else:
+        lines.append("- ⛔ Ruhsat iptali: kayıt bulunamadı")
+    return "\n".join(lines) + _safety_disclaimer()
 
 
 # --------------------------------------------------------------------------- #

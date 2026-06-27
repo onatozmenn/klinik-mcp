@@ -16,7 +16,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from . import clinical, safety, sgk, titck
-from .clients import openfda, pubmed, rxnorm
+from .clients import kubkt, openfda, pubmed, rxnorm
 from .clients.http import APIError
 
 mcp = FastMCP(
@@ -29,9 +29,10 @@ mcp = FastMCP(
         "search; (4) clinical calculators (Cockcroft\u2013Gault creatinine "
         "clearance, Mosteller body-surface-area, weight-based pediatric dose); "
         "(5) Turkey-specific data \u2014 T\u0130TCK SKRS drug registry (search by "
-        "name, full info, drugs sharing an ATC code), T\u0130TCK safety status "
-        "(additional monitoring \u25bc and authorization cancellations), and SGK "
-        "EK-4/A bioequivalents & reimbursement status. "
+        "name, full info, drugs sharing an ATC code), official T\u0130TCK K\u00dcB/KT "
+        "product leaflets (SmPC for clinicians & patient information), T\u0130TCK "
+        "safety status (additional monitoring \u25bc and authorization "
+        "cancellations), and SGK EK-4/A bioequivalents & reimbursement status. "
         "Replies are in Turkish. All data is educational only and is NOT medical "
         "advice; always advise consulting a qualified healthcare professional."
     ),
@@ -306,6 +307,42 @@ async def search_medical_literature(
             f"{meta}\n"
             f"[PMID {pmid}](https://pubmed.ncbi.nlm.nih.gov/{pmid}/)"
         )
+    return "\n\n".join(blocks) + DISCLAIMER
+
+
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_leaflet(
+    query: Annotated[str, Field(description="Turkish drug name to find its official KÜB/KT leaflet for.")],
+    max_results: Annotated[int, Field(description="Maximum number of matching products to return.")] = 5,
+) -> str:
+    """Resmi TİTCK KÜB (Kısa Ürün Bilgisi — hekim) ve KT (Kullanma Talimatı — hasta) prospektüs bağlantıları.
+
+    Looks up a Turkish drug in TİTCK's official KÜB/KT registry and returns the
+    official SmPC (KÜB, for clinicians) and patient-leaflet (KT) PDF links.
+    """
+    term = _clean(query)
+    if not term:
+        return "Lütfen bir ilaç adı girin."
+    try:
+        rows = await kubkt.search_leaflets(term, limit=max_results)
+    except APIError as exc:
+        return f"KÜB/KT isteği başarısız oldu: {exc}"
+    if not rows:
+        return f"'{query}' için TİTCK KÜB/KT kaydı bulunamadı."
+    blocks = [f"# '{query}' — Resmi Prospektüs (KÜB/KT)\n"]
+    for row in rows:
+        parts = [f"### {row['name']}"]
+        if row.get("active"):
+            parts.append(f"**Etken madde:** {row['active']}")
+        if row.get("company"):
+            parts.append(f"**Firma:** {row['company']}")
+        links = []
+        if row.get("kub_url"):
+            links.append(f"[KÜB — hekim]({row['kub_url']})")
+        if row.get("kt_url"):
+            links.append(f"[KT — hasta]({row['kt_url']})")
+        parts.append(" · ".join(links) if links else "_Doküman bağlantısı yok._")
+        blocks.append("\n".join(parts))
     return "\n\n".join(blocks) + DISCLAIMER
 
 
@@ -761,8 +798,8 @@ def resource_server_info() -> str:
     return (
         "# Klinik MCP\n"
         "Türk hekim ve eczacılar için ilaç & klinik bilgi MCP sunucusu.\n\n"
-        "- **Araçlar:** 15 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
-        "klinik hesaplayıcılar, TİTCK SKRS, SGK EK-4/A, TİTCK güvenlik).\n"
+        "- **Araçlar:** 16 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
+        "klinik hesaplayıcılar, TİTCK SKRS, KÜB/KT prospektüs, SGK EK-4/A, TİTCK güvenlik).\n"
         "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_geri_odeme`, `renal_doz_kontrol`.\n"
         "- **Taşıma:** stdio (Claude Desktop) ve Streamable HTTP (ChatGPT / uzak).\n\n"
         "> Bilgiler yalnızca eğitim amaçlıdır, tıbbi tavsiye değildir."

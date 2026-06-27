@@ -41,6 +41,7 @@ Asistanına şöyle sor:
 - *“Metformin'in FDA etiketinde uyarılar neler?”* → `get_drug_label`
 - *“70 yaş, 60 kg, kreatinin 1.4, kadın — kreatinin klerensi kaç?”* → `creatinine_clearance`
 - *“Amoksisilin için TİTCK kaydı: ATC, firma, reçete türü?”* → `get_turkish_drug_info`
+- *“Parol'un resmi prospektüsü (KÜB/KT) nedir?”* → `get_drug_leaflet`
 
 Yanıtlar **resmî kaynaklardan** (TİTCK, SGK, openFDA, NLM, PubMed) gelir —
 eğitimden tahmin değil.
@@ -66,7 +67,7 @@ hazır komut olarak gösterir:
 ## Araçlar (Tools)
 
 <details>
-<summary><b>15 araç — tam listeyi açmak için tıkla</b></summary>
+<summary><b>16 araç — tam listeyi açmak için tıkla</b></summary>
 
 | Araç | Açıklama | Kaynak |
 | --- | --- | --- |
@@ -83,6 +84,7 @@ hazır komut olarak gösterir:
 | `get_reimbursement_status` | Geri ödeme durumu (listede mi) | SGK EK-4/A |
 | `search_turkish_drugs` | Türk ilaç kaydı arama (ad) | TİTCK SKRS |
 | `get_turkish_drug_info` | İlaç bilgisi: ATC, firma, reçete türü | TİTCK SKRS |
+| `get_drug_leaflet` | Resmi KÜB/KT prospektüs linkleri (hekim+hasta) | TİTCK |
 | `find_drugs_by_active_ingredient` | Aynı ATC (etkin madde) ilaçlar | TİTCK SKRS |
 | `get_drug_safety_status` | Ek izleme (▼) + ruhsat iptali | TİTCK |
 

@@ -32,6 +32,37 @@ pinned: false
 > amaçlıdır ve **tıbbi tavsiye değildir**. Tıbbi kararlar için mutlaka bir
 > sağlık profesyoneline danışın.
 
+## 💬 Örnek sorular
+
+Asistanına şöyle sor:
+
+- *“Parol'un SGK eşdeğeri ve en ucuz muadili nedir?”* → `find_drug_equivalents`
+- *“Glioscan ek izlemede mi, ruhsatı iptal mi?”* → `get_drug_safety_status`
+- *“Metformin'in FDA etiketinde uyarılar neler?”* → `get_drug_label`
+- *“70 yaş, 60 kg, kreatinin 1.4, kadın — kreatinin klerensi kaç?”* → `creatinine_clearance`
+- *“Amoksisilin için TİTCK kaydı: ATC, firma, reçete türü?”* → `get_turkish_drug_info`
+
+Yanıtlar **resmî kaynaklardan** (TİTCK, SGK, openFDA, NLM, PubMed) gelir —
+eğitimden tahmin değil.
+
+**Tek tıkla iş akışları (MCP Prompts):** istemcin (Claude / Cursor vb.) bunları
+hazır komut olarak gösterir:
+
+- `ilac_bilgisi` — TİTCK kaydı + güvenlik durumu + SGK eşdeğer/fiyatı, tek özette.
+- `muadil_ve_fiyat` — SGK geri ödeme + en ucuz muadil.
+- `renal_doz_kontrol` — kreatinin klerensi hesabı + böbrek dozu hatırlatması.
+
+## 👥 Kimler için?
+
+| Kullanıcı | Başla | Neden |
+| --- | --- | --- |
+| **Hekim** | `get_drug_label` · `creatinine_clearance` · `get_drug_safety_status` | Endikasyon/doz/uyarı + böbrek dozu + güvenlik bayrakları |
+| **Eczacı** | `find_drug_equivalents` · `get_reimbursement_status` · `get_drug_price` | Muadil + geri ödeme + (varsa) TL fiyat |
+| **Araştırmacı** | `search_medical_literature` · `get_drug_classes` · `find_drugs_for_condition` | PubMed + ilaç sınıfları + endikasyon ters arama |
+
+> Bu sunucu bir **klinik karar aracı değildir**; resmî kaynak teyidi ve
+> hekim/eczacı muhakemesi şarttır.
+
 ## Araçlar (Tools)
 
 <details>

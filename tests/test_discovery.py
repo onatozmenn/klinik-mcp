@@ -21,3 +21,21 @@ def test_server_card_handler_returns_valid_card():
     body = json.loads(response.body)
     assert body["serverInfo"]["name"] == "Klinik MCP"
     assert body["authentication"]["required"] is False
+
+
+def test_health_endpoint_returns_ok():
+    response = asyncio.run(server._health(None))
+    assert response.status_code == 200
+    body = json.loads(response.body)
+    assert body["status"] == "ok"
+    assert body["tool_count"] == 19
+
+
+def test_prompts_registered():
+    names = {p.name for p in asyncio.run(server.mcp.list_prompts())}
+    assert {"ilac_bilgisi", "muadil_ve_fiyat", "renal_doz_kontrol"} <= names
+
+
+def test_resources_registered():
+    uris = {str(r.uri) for r in asyncio.run(server.mcp.list_resources())}
+    assert {"info://server", "info://kaynaklar", "info://surumler"} <= uris

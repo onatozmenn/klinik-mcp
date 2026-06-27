@@ -895,3 +895,115 @@ async def _server_card(request: Request) -> JSONResponse:
 
 
 mcp.custom_route("/.well-known/mcp/server-card.json", methods=["GET"])(_server_card)
+
+
+async def _health(request: Request) -> JSONResponse:
+    """Liveness probe for load balancers / uptime monitors."""
+    try:
+        tool_count = len(await mcp.list_tools())
+    except Exception:
+        tool_count = None
+    return JSONResponse(
+        {
+            "status": "ok",
+            "name": "Klinik MCP",
+            "version": "0.1.0",
+            "tool_count": tool_count,
+        }
+    )
+
+
+mcp.custom_route("/health", methods=["GET"])(_health)
+
+
+# --------------------------------------------------------------------------- #
+# Prompts — one-click workflows that orchestrate several tools into a named task.
+# --------------------------------------------------------------------------- #
+@mcp.prompt
+def ilac_bilgisi(ilac: str) -> str:
+    """Bir ilaç için TİTCK kaydı, güvenlik durumu ve SGK eşdeğer/fiyatını derler."""
+    return (
+        f"'{ilac}' ilacı için şu araçları sırayla çağır ve sonucu tek bir özet hâlinde sun:\n"
+        "1. `get_turkish_drug_info` → TİTCK kaydı (ATC, firma, reçete türü, barkod).\n"
+        "2. `get_drug_safety_status` → ek izleme (▼) ve ruhsat iptali durumu.\n"
+        "3. `find_drug_equivalents` → SGK eşdeğerleri ve (varsa) en ucuz muadil.\n"
+        "Sonunda kısa bir klinik özet ver; bunun tıbbi tavsiye olmadığını hatırlat."
+    )
+
+
+@mcp.prompt
+def muadil_ve_fiyat(ilac: str) -> str:
+    """Bir ilacın SGK geri ödeme durumunu ve en ucuz eşdeğerini bulur."""
+    return (
+        f"'{ilac}' için önce `get_reimbursement_status` ile SGK geri ödeme durumunu, "
+        "sonra `find_drug_equivalents` ile eşdeğer grubu ve en ucuz muadili getir. "
+        "Hangi muadilin en ekonomik olduğunu vurgula; resmî güncel listeden teyit "
+        "gerektiğini belirt."
+    )
+
+
+@mcp.prompt
+def renal_doz_kontrol(
+    ilac: str, yas: str, kilo: str, kreatinin: str, cinsiyet: str
+) -> str:
+    """Kreatinin klerensini hesaplar ve böbrek fonksiyonuna göre doz ayarını hatırlatır."""
+    return (
+        f"Önce `creatinine_clearance` aracını çağır (yas={yas}, kilo={kilo}, "
+        f"serum_creatinine_mg_dl={kreatinin}, sex={cinsiyet}). Çıkan CrCl'ye göre "
+        f"'{ilac}' için böbrek fonksiyonuna göre doz ayarlaması gerekip gerekmediğini "
+        "güvenilir bir kaynaktan teyit etmesi gerektiğini açıkla. Tıbbi tavsiye "
+        "olmadığını hatırlat."
+    )
+
+
+# --------------------------------------------------------------------------- #
+# Resources — read-only reference content (in-process, no upstream calls).
+# --------------------------------------------------------------------------- #
+@mcp.resource("info://server")
+def resource_server_info() -> str:
+    """Klinik MCP hakkında genel bilgi."""
+    return (
+        "# Klinik MCP\n"
+        "Türk hekim ve eczacılar için ilaç & klinik bilgi MCP sunucusu.\n\n"
+        "- **Araçlar:** 19 (openFDA, RxNorm/RxClass, PubMed, klinik hesaplayıcılar, "
+        "TİTCK SKRS, SGK EK-4/A, TİTCK güvenlik, TL fiyat).\n"
+        "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_fiyat`, `renal_doz_kontrol`.\n"
+        "- **Taşıma:** stdio (Claude Desktop) ve Streamable HTTP (ChatGPT / uzak).\n\n"
+        "> Bilgiler yalnızca eğitim amaçlıdır, tıbbi tavsiye değildir."
+    )
+
+
+@mcp.resource("info://kaynaklar")
+def resource_sources() -> str:
+    """Veri kaynakları ve ne için kullanıldıkları."""
+    return (
+        "# Veri Kaynakları\n"
+        "- **openFDA** — ilaç etiketleri, yan etkiler (FAERS), geri çağırmalar.\n"
+        "- **NLM RxNorm / RxClass** — ad normalizasyonu, etken madde/marka, ilaç sınıfları.\n"
+        "- **PubMed (NCBI)** — tıbbi literatür.\n"
+        "- **TİTCK SKRS** — Türk ruhsatlı ilaç kaydı (ad, barkod, ATC, firma, reçete).\n"
+        "- **SGK EK-4/A** — geri ödeme, eşdeğer grup, barkod, kamu no.\n"
+        "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76).\n"
+        "- **Fiyat** — takılabilir barkod→TL kaynağı (yüklüyse)."
+    )
+
+
+@mcp.resource("info://surumler")
+def resource_versions() -> str:
+    """Paketlenmiş yerel veri kümelerinin sürüm ve kayıt sayıları."""
+    titck_meta, sgk_meta = titck.meta(), sgk.meta()
+    safety_meta, price_meta = safety.meta(), prices.meta()
+    monitoring = safety_meta.get("monitoring", {})
+    cancellations = safety_meta.get("cancellations", {})
+    price_count = str(price_meta.get("count", "?")) if prices.available() else "yüklü değil"
+    lines = [
+        "# Yerel Veri Sürümleri",
+        "| Veri kümesi | Sürüm | Kayıt |",
+        "| --- | --- | ---: |",
+        f"| TİTCK SKRS | {titck_meta.get('version', '?')} | {titck_meta.get('count', '?')} |",
+        f"| SGK EK-4/A | {sgk_meta.get('version', '?')} | {sgk_meta.get('count', '?')} |",
+        f"| Ek izleme | {monitoring.get('version', '?')} | {monitoring.get('count', '?')} |",
+        f"| Ruhsat iptali | {cancellations.get('version', '?')} | {cancellations.get('count', '?')} |",
+        f"| Fiyat | {price_meta.get('version') or '—'} | {price_count} |",
+    ]
+    return "\n".join(lines)

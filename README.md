@@ -106,7 +106,7 @@ kurulum gerekmez. İstemcini seç:
    ```
    https://onatozmenn-klinik-mcp.hf.space/mcp
    ```
-3. Kaydet. Artık sohbette _“parol muadili nedir, en ucuzu hangisi?”_ gibi sorabilirsin.
+3. Kaydet. Artık sohbette _“Warfarin ile aspirin birlikte verilebilir mi?”_ gibi sorabilirsin.
 
 > Not: Özel MCP araçları yalnızca **Developer mode** açık hesaplarda görünür.
 
@@ -128,6 +128,17 @@ kurulum gerekmez. İstemcini seç:
 ```
 
 Claude Desktop'ı kapat-aç; araçlar 🔨 menüsünde görünür.
+
+### Claude.ai (web)
+
+Pro / Max (ve Free — tek connector) planlarında uzak MCP doğrudan bağlanır:
+
+1. **[Customize → Connectors](https://claude.ai/customize/connectors)** → **“+” → Add custom connector**.
+2. MCP URL'sini gir (OAuth alanları boş — sunucu anahtarsız):
+   ```
+   https://onatozmenn-klinik-mcp.hf.space/mcp
+   ```
+3. **Add** de; sohbette sol alttaki **“+” → Connectors**'tan Klinik MCP'yi aç.
 
 ### Smithery (tek komut)
 

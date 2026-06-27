@@ -43,6 +43,7 @@ Asistanına şöyle sor:
 - *“Amoksisilin için TİTCK kaydı: ATC, firma, reçete türü?”* → `get_turkish_drug_info`
 - *“Parol'un resmi prospektüsü (KÜB/KT) nedir?”* → `get_drug_leaflet`
 - *“Amifampridine yurt dışından temin edilebilir mi?”* → `find_foreign_supply`
+- *“Warfarin ile aspirin birlikte verilebilir mi?”* → `check_drug_interactions`
 
 Yanıtlar **resmî kaynaklardan** (TİTCK, SGK, openFDA, NLM, PubMed) gelir —
 eğitimden tahmin değil.
@@ -68,12 +69,13 @@ hazır komut olarak gösterir:
 ## Araçlar (Tools)
 
 <details>
-<summary><b>17 araç — tam listeyi açmak için tıkla</b></summary>
+<summary><b>18 araç — tam listeyi açmak için tıkla</b></summary>
 
 | Araç | Açıklama | Kaynak |
 | --- | --- | --- |
 | `get_drug_label` | Endikasyon, doz, uyarı, kontrendikasyon, etkileşim, yan etki | openFDA |
 | `get_drug_interactions` | Etiketteki ilaç etkileşimleri bölümü | openFDA |
+| `check_drug_interactions` | İki ilaç arası etkileşim şiddeti (Major/Moderate/Minor) | DDInter |
 | `get_drug_adverse_events` | En sık bildirilen yan etkiler (FAERS) | openFDA |
 | `find_drugs_for_condition` | Hastalığa göre ilaç bulma (ters arama) | openFDA |
 | `get_drug_classes` | Terapötik / ATC / etki mekanizması sınıfları | RxClass |
@@ -173,6 +175,7 @@ npx @modelcontextprotocol/inspector .\.venv\Scripts\python.exe -m health_mcp
 - **openFDA** — https://open.fda.gov/apis/ (ilaç etiketleri, yan etkiler, geri çağırmalar)
 - **NLM RxNorm / RxNav / RxClass** — https://rxnav.nlm.nih.gov/ (ilaç terminolojisi ve sınıfları)
 - **PubMed (NCBI E-utilities)** — https://www.ncbi.nlm.nih.gov/books/NBK25500/ (tıbbi literatür)
+- **DDInter 2.0** — https://ddinter.scbdd.com/ (ikili ilaç-ilaç etkileşim; CC BY-NC-SA 4.0, yalnızca ticari olmayan kullanım)
 
 ### 🇹🇷 Türkiye verisi (SGK EK-4/A — tam liste)
 

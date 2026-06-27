@@ -15,7 +15,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import clinical, foreign, safety, sgk, titck
+from . import clinical, foreign, interactions, safety, sgk, titck
 from .clients import kubkt, openfda, pubmed, rxnorm
 from .clients.http import APIError
 
@@ -33,7 +33,9 @@ mcp = FastMCP(
         "product leaflets (SmPC for clinicians & patient information), T\u0130TCK "
         "safety status (additional monitoring \u25bc and authorization "
         "cancellations), a T\u0130TCK foreign-supply (yurt d\u0131\u015f\u0131) active-substance "
-        "list, and SGK EK-4/A bioequivalents & reimbursement status. "
+        "list, and SGK EK-4/A bioequivalents & reimbursement status; (6) pairwise "
+        "drug\u2013drug interaction severity from DDInter, with Turkish brand/active-name "
+        "bridging. "
         "Replies are in Turkish. All data is educational only and is NOT medical "
         "advice; always advise consulting a qualified healthcare professional."
     ),
@@ -755,6 +757,90 @@ def get_drug_safety_status(
 
 
 # --------------------------------------------------------------------------- #
+# Universal tool — pairwise drug-drug interaction severity (DDInter 2.0; see
+# interactions.py / build_ddinter_snapshot.py). Turkish names bridged via TİTCK.
+# --------------------------------------------------------------------------- #
+def _ddi_disclaimer() -> str:
+    version = interactions.meta().get("version", "")
+    suffix = f" · sürüm {version}" if version else ""
+    return (
+        f"\n\n---\n*Kaynak: DDInter 2.0 (CC BY-NC-SA 4.0), ddinter.scbdd.com{suffix}. "
+        "Bir etkileşimin listede olmaması güvenli olduğunu göstermez. Yalnızca "
+        "eğitim amaçlıdır, tıbbi tavsiye değildir; klinik kararlar için sorumlu "
+        "hekim/eczacıya danışın.*"
+    )
+
+
+_DDI_BADGE = {
+    "Major": "🔴 Major (Yüksek)",
+    "Moderate": "🟠 Moderate (Orta)",
+    "Minor": "🟡 Minor (Düşük)",
+    "Unknown": "⚪ Bilinmiyor",
+}
+_DDI_NOTE = {
+    "Major": "Yaşamı tehdit edebilir ve/veya ciddi yan etkiyi önlemek için tıbbi müdahale gerektirir.",
+    "Moderate": "Hastanın durumunu kötüleştirebilir ve/veya tedavi değişikliği gerektirebilir.",
+    "Minor": "Klinik etki sınırlıdır; genellikle tedavi değişikliği gerektirmez.",
+    "Unknown": "Şiddet sınıflandırması mevcut değil.",
+}
+
+
+@mcp.tool(annotations=_LOCAL_TOOL)
+def check_drug_interactions(
+    drug1: Annotated[str, Field(description="First drug — brand, active substance, or INN (Turkish or English).")],
+    drug2: Annotated[str, Field(description="Second drug — brand, active substance, or INN (Turkish or English).")],
+) -> str:
+    """İki ilaç arasındaki etkileşim şiddetini kontrol eder (DDInter 2.0).
+
+    Resolves each drug to a DDInter substance (synonym table, direct name, or a
+    TİTCK brand/active-name → ATC-substance bridge) and returns the pairwise
+    severity (Major / Moderate / Minor). A missing pair is reported as "no
+    recorded interaction", which does NOT prove the combination is safe.
+    """
+    if not _clean(drug1) or not _clean(drug2):
+        return "Lütfen iki ilaç adı girin."
+    if not interactions.available():
+        return (
+            "DDInter etkileşim verisi yüklü değil. `scripts/build_ddinter_"
+            "snapshot.py` ile yükleyin (bkz. README)."
+        )
+    res = interactions.check_pair(drug1, drug2)
+    a, b = res["a"], res["b"]
+    unresolved = [q for q, r in ((drug1, a), (drug2, b)) if not r]
+    if unresolved:
+        names = ", ".join(f"'{u}'" for u in unresolved)
+        return (
+            f"Şu ilaç(lar) DDInter listesinde bulunamadı: {names}. Etkin maddeyi "
+            "veya uluslararası adı (INN) deneyin (ör. Aspirin → Acetylsalicylic "
+            "acid)." + _ddi_disclaimer()
+        )
+    name_a, name_b = a["name"], b["name"]
+    if res.get("same"):
+        return (
+            f"'{drug1}' ve '{drug2}' aynı etkin maddeye (**{name_a}**) "
+            "çözümlendi; etkileşim sorgusu için iki farklı ilaç girin."
+            + _ddi_disclaimer()
+        )
+    header = f"# İlaç Etkileşimi: {name_a} × {name_b}"
+    label = res["level_label"]
+    if label is None:
+        body = (
+            "✅ DDInter veritabanında bu ikisi arasında **kayıtlı etkileşim "
+            "bulunamadı.**\n\n"
+            "> ⚠️ Bu, kombinasyonun güvenli olduğunu **kanıtlamaz** — DDInter "
+            "her etkileşimi içermeyebilir."
+        )
+        lines = [header, "", body]
+    else:
+        lines = [header, "", f"**Şiddet: {_DDI_BADGE[label]}**", "", _DDI_NOTE[label]]
+    bridged = [r for r in (a, b) if r.get("via") == "titck"]
+    if bridged:
+        notes = "; ".join(f"{r['titck_name']} → {r['name']}" for r in bridged)
+        lines += ["", f"*Çözümleme: {notes} (TİTCK ATC köprüsü)*"]
+    return "\n".join(lines) + _ddi_disclaimer()
+
+
+# --------------------------------------------------------------------------- #
 # Discovery: static MCP server card. Registries (e.g. Smithery) read this when
 # live scanning is blocked. Served at /.well-known/mcp/server-card.json on the
 # HTTP transport.
@@ -856,9 +942,9 @@ def resource_server_info() -> str:
     return (
         "# Klinik MCP\n"
         "Türk hekim ve eczacılar için ilaç & klinik bilgi MCP sunucusu.\n\n"
-        "- **Araçlar:** 17 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
-        "klinik hesaplayıcılar, TİTCK SKRS, KÜB/KT prospektüs, yurt dışı etkin madde, "
-        "SGK EK-4/A, TİTCK güvenlik).\n"
+        "- **Araçlar:** 18 (openFDA etiket/etkileşim/yan etki, DDInter ikili "
+        "etkileşim, RxClass/ATC, PubMed, klinik hesaplayıcılar, TİTCK SKRS, KÜB/KT "
+        "prospektüs, yurt dışı etkin madde, SGK EK-4/A, TİTCK güvenlik).\n"
         "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_geri_odeme`, `renal_doz_kontrol`.\n"
         "- **Taşıma:** stdio (Claude Desktop) ve Streamable HTTP (ChatGPT / uzak).\n\n"
         "> Bilgiler yalnızca eğitim amaçlıdır, tıbbi tavsiye değildir."
@@ -873,6 +959,7 @@ def resource_sources() -> str:
         "- **openFDA** — ilaç etiketleri, etkileşimler, yan etkiler (FAERS).\n"
         "- **NLM RxClass** — ilaç sınıfları (ATC dahil).\n"
         "- **PubMed (NCBI)** — tıbbi literatür.\n"
+        "- **DDInter 2.0** — ikili ilaç-ilaç etkileşim şiddeti (CC BY-NC-SA 4.0).\n"
         "- **TİTCK SKRS** — Türk ruhsatlı ilaç kaydı (ad, barkod, ATC, firma, reçete).\n"
         "- **SGK EK-4/A** — geri ödeme, eşdeğer grup, barkod, kamu no.\n"
         "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76).\n"
@@ -886,6 +973,7 @@ def resource_versions() -> str:
     titck_meta, sgk_meta = titck.meta(), sgk.meta()
     safety_meta = safety.meta()
     foreign_meta = foreign.meta()
+    ddi_meta = interactions.meta()
     monitoring = safety_meta.get("monitoring", {})
     cancellations = safety_meta.get("cancellations", {})
     lines = [
@@ -897,5 +985,6 @@ def resource_versions() -> str:
         f"| Ek izleme | {monitoring.get('version', '?')} | {monitoring.get('count', '?')} |",
         f"| Ruhsat iptali | {cancellations.get('version', '?')} | {cancellations.get('count', '?')} |",
         f"| Yurt dışı etkin madde | {foreign_meta.get('version', '?')} | {foreign_meta.get('count', '?')} |",
+        f"| DDInter etkileşim | {ddi_meta.get('version', '?')} | {ddi_meta.get('pair_count', '?')} |",
     ]
     return "\n".join(lines)

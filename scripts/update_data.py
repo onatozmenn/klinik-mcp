@@ -180,6 +180,13 @@ def update_foreign() -> None:
         Path(xlsx).unlink(missing_ok=True)
 
 
+def update_ddinter() -> None:
+    # build_ddinter_snapshot.py downloads the eight DDInter CSVs itself.
+    subprocess.run(
+        [sys.executable, str(SCRIPTS / "build_ddinter_snapshot.py")], check=True
+    )
+
+
 def main() -> None:
     print("== TİTCK SKRS güncelleniyor ==")
     update_titck()
@@ -189,6 +196,8 @@ def main() -> None:
     update_safety()
     print("\n== TİTCK yurt dışı listesi güncelleniyor ==")
     update_foreign()
+    print("\n== DDInter ilaç etkileşimleri güncelleniyor ==")
+    update_ddinter()
     print("\n✓ Tüm güncellemeler tamamlandı.")
 
 

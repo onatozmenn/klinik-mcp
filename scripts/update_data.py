@@ -46,6 +46,7 @@ SGK_ZIP_RE = re.compile(r"/Download/DownloadFile\?f=[^\"'\s]+?\.zip[^\"'\s]*")
 
 TITCK_MONITORING_PAGE = "https://www.titck.gov.tr/dinamikmodul/57"  # Ek İzleme
 TITCK_CANCELLATION_PAGE = "https://www.titck.gov.tr/dinamikmodul/76"  # Ruhsat İptal
+TITCK_FOREIGN_PAGE = "https://www.titck.gov.tr/dinamikmodul/126"  # Yurt Dışı Etkin Madde
 TITCK_SAFETY_XLSX_RE = re.compile(
     r"https://titck\.gov\.tr/storage/[^\"'\s]*dynamicModulesAttachment[^\"'\s]+?\.xlsx",
     re.IGNORECASE,
@@ -166,6 +167,19 @@ def update_safety() -> None:
             Path(path).unlink(missing_ok=True)
 
 
+def update_foreign() -> None:
+    url = _latest_titck_xlsx(TITCK_FOREIGN_PAGE)
+    if not url:
+        print("! TİTCK yurt dışı etkin madde listesi bulunamadı, atlanıyor.")
+        return
+    print("TİTCK yurt dışı:", url)
+    xlsx = _download(url, ".xlsx")
+    try:
+        _build("build_titck_foreign_snapshot.py", xlsx)
+    finally:
+        Path(xlsx).unlink(missing_ok=True)
+
+
 def main() -> None:
     print("== TİTCK SKRS güncelleniyor ==")
     update_titck()
@@ -173,6 +187,8 @@ def main() -> None:
     update_sgk()
     print("\n== TİTCK güvenlik listeleri güncelleniyor ==")
     update_safety()
+    print("\n== TİTCK yurt dışı listesi güncelleniyor ==")
+    update_foreign()
     print("\n✓ Tüm güncellemeler tamamlandı.")
 
 

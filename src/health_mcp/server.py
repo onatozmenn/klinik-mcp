@@ -15,7 +15,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import clinical, safety, sgk, titck
+from . import clinical, foreign, safety, sgk, titck
 from .clients import kubkt, openfda, pubmed, rxnorm
 from .clients.http import APIError
 
@@ -32,7 +32,8 @@ mcp = FastMCP(
         "name, full info, drugs sharing an ATC code), official T\u0130TCK K\u00dcB/KT "
         "product leaflets (SmPC for clinicians & patient information), T\u0130TCK "
         "safety status (additional monitoring \u25bc and authorization "
-        "cancellations), and SGK EK-4/A bioequivalents & reimbursement status. "
+        "cancellations), a T\u0130TCK foreign-supply (yurt d\u0131\u015f\u0131) active-substance "
+        "list, and SGK EK-4/A bioequivalents & reimbursement status. "
         "Replies are in Turkish. All data is educational only and is NOT medical "
         "advice; always advise consulting a qualified healthcare professional."
     ),
@@ -611,6 +612,63 @@ def find_drugs_by_active_ingredient(
 
 
 # --------------------------------------------------------------------------- #
+# Turkey-specific tools — TİTCK 'Yurt Dışı Etkin Madde' (foreign-supply) list.
+# --------------------------------------------------------------------------- #
+def _foreign_disclaimer() -> str:
+    info = foreign.meta()
+    return (
+        f"\n\n---\n*Kaynak: {info.get('source', 'TİTCK Yurt Dışı Etkin Madde')} "
+        f"({info.get('version', '?')}, {info.get('count', '?')} kayıt). Resmî güncel "
+        "listeden ve TEB'den teyit edin.*"
+    )
+
+
+@mcp.tool(annotations=_LOCAL_TOOL)
+def find_foreign_supply(
+    query: Annotated[str, Field(description="Active substance, drug name, or ATC code to check against TİTCK's foreign-supply list.")],
+    max_results: Annotated[int, Field(description="Maximum number of substances to return.")] = 15,
+) -> str:
+    """TİTCK Yurt Dışı Etkin Madde Listesi: bir etkin maddenin yurt dışından temin edilebilirliği.
+
+    Checks whether an active substance can be supplied from abroad (via TEB),
+    with ATC, pharmaceutical form, prescription type and whether import needs
+    TİTCK's written approval.
+    """
+    matches = foreign.search_by_name(query, limit=max_results)
+    drug = titck.resolve(query)
+    if drug and drug.get("atc_code"):
+        seen = {m.get("code") for m in matches}
+        for entry in foreign.find_by_atc(drug["atc_code"]):
+            if entry.get("code") not in seen:
+                matches.append(entry)
+                seen.add(entry.get("code"))
+    matches = matches[:max_results]
+    if not matches:
+        return (
+            f"'{query}' TİTCK Yurt Dışı Etkin Madde Listesi'nde bulunamadı."
+            + _foreign_disclaimer()
+        )
+    lines = [
+        f"# '{query}' — Yurt Dışı Etkin Madde",
+        f"**{len(matches)}** kayıt\n",
+        "| Etkin madde | ATC | Form | Reçete | İthal |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for substance in matches:
+        ithal = (
+            "yazılı onaysız ✓"
+            if substance.get("import_without_approval")
+            else "yazılı onay gerekli"
+        )
+        lines.append(
+            f"| {substance.get('active', '?')} | {substance.get('atc_code', '')} "
+            f"| {substance.get('form', '')} | {substance.get('prescription_type', '')} "
+            f"| {ithal} |"
+        )
+    return "\n".join(lines) + _foreign_disclaimer()
+
+
+# --------------------------------------------------------------------------- #
 # Turkey-specific tools — TİTCK drug-safety status (additional monitoring +
 # authorization cancellations; see safety.py / build_titck_safety_snapshot.py)
 # --------------------------------------------------------------------------- #
@@ -798,8 +856,9 @@ def resource_server_info() -> str:
     return (
         "# Klinik MCP\n"
         "Türk hekim ve eczacılar için ilaç & klinik bilgi MCP sunucusu.\n\n"
-        "- **Araçlar:** 16 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
-        "klinik hesaplayıcılar, TİTCK SKRS, KÜB/KT prospektüs, SGK EK-4/A, TİTCK güvenlik).\n"
+        "- **Araçlar:** 17 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
+        "klinik hesaplayıcılar, TİTCK SKRS, KÜB/KT prospektüs, yurt dışı etkin madde, "
+        "SGK EK-4/A, TİTCK güvenlik).\n"
         "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_geri_odeme`, `renal_doz_kontrol`.\n"
         "- **Taşıma:** stdio (Claude Desktop) ve Streamable HTTP (ChatGPT / uzak).\n\n"
         "> Bilgiler yalnızca eğitim amaçlıdır, tıbbi tavsiye değildir."
@@ -816,7 +875,8 @@ def resource_sources() -> str:
         "- **PubMed (NCBI)** — tıbbi literatür.\n"
         "- **TİTCK SKRS** — Türk ruhsatlı ilaç kaydı (ad, barkod, ATC, firma, reçete).\n"
         "- **SGK EK-4/A** — geri ödeme, eşdeğer grup, barkod, kamu no.\n"
-        "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76)."
+        "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76).\n"
+        "- **TİTCK yurt dışı** — yurt dışından temin edilebilen etkin maddeler (dinamikmodul/126)."
     )
 
 
@@ -825,6 +885,7 @@ def resource_versions() -> str:
     """Paketlenmiş yerel veri kümelerinin sürüm ve kayıt sayıları."""
     titck_meta, sgk_meta = titck.meta(), sgk.meta()
     safety_meta = safety.meta()
+    foreign_meta = foreign.meta()
     monitoring = safety_meta.get("monitoring", {})
     cancellations = safety_meta.get("cancellations", {})
     lines = [
@@ -835,5 +896,6 @@ def resource_versions() -> str:
         f"| SGK EK-4/A | {sgk_meta.get('version', '?')} | {sgk_meta.get('count', '?')} |",
         f"| Ek izleme | {monitoring.get('version', '?')} | {monitoring.get('count', '?')} |",
         f"| Ruhsat iptali | {cancellations.get('version', '?')} | {cancellations.get('count', '?')} |",
+        f"| Yurt dışı etkin madde | {foreign_meta.get('version', '?')} | {foreign_meta.get('count', '?')} |",
     ]
     return "\n".join(lines)

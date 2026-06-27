@@ -28,7 +28,7 @@ def test_health_endpoint_returns_ok():
     assert response.status_code == 200
     body = json.loads(response.body)
     assert body["status"] == "ok"
-    assert body["tool_count"] == 16
+    assert body["tool_count"] == 17
 
 
 def test_prompts_registered():

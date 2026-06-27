@@ -1,11 +1,12 @@
-"""Health & medication information MCP server.
+"""Klinik MCP — drug & clinical information server for Turkish clinicians.
 
-Exposes official US public-health data sources (openFDA, NLM RxNorm) as MCP
-tools that Claude, ChatGPT and other MCP clients can call.
+Combines Turkey-specific data (TİTCK drug registry & safety, SGK EK-4/A
+reimbursement/equivalents) with universal clinical tools (openFDA labels &
+interactions, RxClass/ATC, PubMed) and bedside calculators, exposed as MCP
+tools/prompts/resources for Claude, ChatGPT and other MCP clients.
 """
 from __future__ import annotations
 
-import asyncio
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -14,7 +15,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import clinical, prices, safety, sgk, titck
+from . import clinical, safety, sgk, titck
 from .clients import openfda, pubmed, rxnorm
 from .clients.http import APIError
 
@@ -23,16 +24,14 @@ mcp = FastMCP(
     instructions=(
         "Klinik MCP — drug & clinical information tools for Turkish physicians "
         "and pharmacists. Capabilities: (1) openFDA drug labels, adverse events "
-        "(FAERS) and recalls, plus condition\u2192drug reverse lookup; (2) NLM "
-        "RxNorm/RxClass for name normalization, ingredients/brands and "
+        "(FAERS), plus condition\u2192drug reverse lookup; (2) NLM RxClass for "
         "therapeutic/ATC/mechanism classes; (3) PubMed medical-literature "
         "search; (4) clinical calculators (Cockcroft\u2013Gault creatinine "
         "clearance, Mosteller body-surface-area, weight-based pediatric dose); "
         "(5) Turkey-specific data \u2014 T\u0130TCK SKRS drug registry (search by "
         "name, full info, drugs sharing an ATC code), T\u0130TCK safety status "
-        "(additional monitoring \u25bc and authorization cancellations), SGK "
-        "EK-4/A bioequivalents & reimbursement status, and TL prices when a "
-        "price source is loaded. "
+        "(additional monitoring \u25bc and authorization cancellations), and SGK "
+        "EK-4/A bioequivalents & reimbursement status. "
         "Replies are in Turkish. All data is educational only and is NOT medical "
         "advice; always advise consulting a qualified healthcare professional."
     ),
@@ -92,17 +91,6 @@ def _label_header(openfda_info: dict, fallback: str) -> str:
     return "\n".join(lines)
 
 
-def _concepts_by_tty(related_group: dict, tty: str) -> list[str]:
-    names: list[str] = []
-    for group in related_group.get("conceptGroup", []):
-        if group.get("tty") == tty:
-            for concept in group.get("conceptProperties", []):
-                name = concept.get("name")
-                if name:
-                    names.append(name)
-    return names
-
-
 # --------------------------------------------------------------------------- #
 # Tool behaviour hints — every tool is read-only & idempotent. "API" tools reach
 # external services (open world); "LOCAL" tools read bundled data / pure math.
@@ -114,58 +102,6 @@ _LOCAL_TOOL = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldH
 # --------------------------------------------------------------------------- #
 # Tools
 # --------------------------------------------------------------------------- #
-@mcp.tool(annotations=_API_TOOL)
-async def search_drugs(
-    query: Annotated[str, Field(description="Drug name to search — brand, generic, or even misspelled.")],
-    max_results: Annotated[int, Field(description="Maximum number of results to return.")] = 10,
-) -> str:
-    """Search for drugs by brand, generic, or even misspelled name.
-
-    Returns matching RxNorm concepts with their RxCUI identifier, term type
-    and match score. Use this first to resolve an exact drug name before
-    calling the other tools.
-    """
-    term = _clean(query)
-    if not term:
-        return "Lütfen aranacak bir ilaç adı girin."
-    try:
-        candidates = await rxnorm.approximate_term(term, max_entries=max_results * 2)
-    except APIError as exc:
-        return f"Arama başarısız oldu: {exc}"
-    if not candidates:
-        return f"'{query}' için eşleşen ilaç bulunamadı."
-
-    seen: set[str] = set()
-    picked: list[tuple[str, str]] = []
-    for candidate in candidates:
-        rxcui = candidate.get("rxcui")
-        if rxcui and rxcui not in seen:
-            seen.add(rxcui)
-            picked.append((rxcui, candidate.get("score", "")))
-        if len(picked) >= max_results:
-            break
-
-    prop_results = await asyncio.gather(
-        *(rxnorm.properties(rxcui) for rxcui, _ in picked),
-        return_exceptions=True,
-    )
-
-    lines = [f"## '{query}' için ilaç sonuçları\n"]
-    for (rxcui, score), props in zip(picked, prop_results):
-        if isinstance(props, Exception) or not props:
-            continue
-        name = props.get("name", "?")
-        tty = props.get("tty", "")
-        try:
-            score_str = f"{float(score):.0f}"
-        except (TypeError, ValueError):
-            score_str = str(score)
-        lines.append(f"- **{name}** — RxCUI `{rxcui}`, tür: {tty}, skor: {score_str}")
-    if len(lines) == 1:
-        return f"'{query}' için ayrıntı alınamadı."
-    return "\n".join(lines) + DISCLAIMER
-
-
 @mcp.tool(annotations=_API_TOOL)
 async def get_drug_label(
     drug_name: Annotated[str, Field(description="Drug name (brand, generic, or active substance).")],
@@ -256,74 +192,6 @@ async def get_drug_adverse_events(
         term = str(item.get("term", "?")).title()
         count = item.get("count", 0)
         lines.append(f"| {term} | {count:,} |")
-    return "\n".join(lines) + DISCLAIMER
-
-
-@mcp.tool(annotations=_API_TOOL)
-async def get_drug_recalls(
-    query: Annotated[str, Field(description="Drug or product name to search recalls for.")],
-    limit: Annotated[int, Field(description="Maximum number of recall records to return.")] = 10,
-) -> str:
-    """Get drug recall / enforcement reports for a product from openFDA."""
-    term = _clean(query)
-    if not term:
-        return "Lütfen bir ilaç/ürün adı girin."
-    try:
-        results = await openfda.enforcement_reports(term, limit=limit)
-    except APIError as exc:
-        return f"openFDA isteği başarısız oldu: {exc}"
-    if not results:
-        return f"'{query}' için geri çağırma (recall) kaydı bulunamadı."
-
-    blocks = [f"# {query} — Geri Çağırma (Recall) Kayıtları\n"]
-    for report in results:
-        product = _join(report.get("product_description"))[:160]
-        blocks.append(
-            f"### {product}\n"
-            f"- **Sınıf:** {report.get('classification', '?')}\n"
-            f"- **Durum:** {report.get('status', '?')}\n"
-            f"- **Sebep:** {_truncate(_join(report.get('reason_for_recall')), 300)}\n"
-            f"- **Firma:** {report.get('recalling_firm', '?')}\n"
-            f"- **Başlangıç tarihi:** {_fmt_date(report.get('recall_initiation_date'))}"
-        )
-    return "\n\n".join(blocks) + DISCLAIMER
-
-
-@mcp.tool(annotations=_API_TOOL)
-async def get_rxnorm_details(
-    drug_name: Annotated[str, Field(description="Drug name to normalize via RxNorm.")],
-) -> str:
-    """Normalize a drug name and list its ingredients and brand names (RxNorm)."""
-    name = _clean(drug_name)
-    if not name:
-        return "Lütfen bir ilaç adı girin."
-    try:
-        ids = await rxnorm.rxcui_by_name(name)
-        if not ids:
-            candidates = await rxnorm.approximate_term(name, max_entries=1)
-            ids = [candidates[0]["rxcui"]] if candidates else []
-        if not ids:
-            return f"'{drug_name}' için RxNorm kaydı bulunamadı."
-        rxcui = ids[0]
-        props, related_group = await asyncio.gather(
-            rxnorm.properties(rxcui),
-            rxnorm.related(rxcui, ["IN", "BN"]),
-        )
-    except APIError as exc:
-        return f"RxNorm isteği başarısız oldu: {exc}"
-
-    ingredients = _concepts_by_tty(related_group, "IN")
-    brands = _concepts_by_tty(related_group, "BN")
-    lines = [
-        f"# {props.get('name', drug_name)} — RxNorm",
-        f"**RxCUI:** `{rxcui}`",
-    ]
-    if props.get("tty"):
-        lines.append(f"**Tür (TTY):** {props['tty']}")
-    if ingredients:
-        lines.append(f"**Etken maddeler:** {', '.join(sorted(set(ingredients)))}")
-    if brands:
-        lines.append(f"**Marka adları:** {', '.join(sorted(set(brands))[:25])}")
     return "\n".join(lines) + DISCLAIMER
 
 
@@ -582,34 +450,17 @@ def find_drug_equivalents(
             f"**{record.get('name')}** için tanımlı eşdeğer grubu yok."
             + _sgk_disclaimer()
         )
-    members = sgk.group_members(group)
-    has_price = prices.available()
-    if has_price:
-        members = sorted(
-            members,
-            key=lambda m: prices.retail(m.get("barcode"))
-            if prices.retail(m.get("barcode")) is not None
-            else float("inf"),
-        )
-    members = members[:max_results]
-    note = " (fiyata göre, ucuzdan)" if has_price else ""
+    members = sgk.group_members(group)[:max_results]
     lines = [
         f"# {record.get('name')} — Eşdeğer İlaçlar",
-        f"**Eşdeğer grup:** `{group}` · **{len(members)}** ürün{note}\n",
-        "| İlaç | Barkod | Fiyat (TL) |" if has_price else "| İlaç | Barkod |",
-        "| --- | --- | ---: |" if has_price else "| --- | --- |",
+        f"**Eşdeğer grup:** `{group}` · **{len(members)}** ürün\n",
+        "| İlaç | Barkod |",
+        "| --- | --- |",
     ]
     for member in members:
-        if has_price:
-            value = prices.retail(member.get("barcode"))
-            price_s = f"{value:.2f}" if value is not None else "—"
-            lines.append(
-                f"| {member.get('name', '?')} | {member.get('barcode', '?')} | {price_s} |"
-            )
-        else:
-            lines.append(
-                f"| {member.get('name', '?')} | {member.get('barcode', '?')} |"
-            )
+        lines.append(
+            f"| {member.get('name', '?')} | {member.get('barcode', '?')} |"
+        )
     return "\n".join(lines) + _sgk_disclaimer()
 
 
@@ -691,10 +542,6 @@ def get_turkish_drug_info(
     if not drug:
         return f"'{query}' TİTCK listesinde bulunamadı."
     lines = [f"# {drug.get('name')}", *_titck_fields(drug)]
-    price = prices.retail(drug.get("barcode"))
-    if price is not None:
-        suffix = " *(örnek)*" if prices.meta().get("sample") else ""
-        lines.append(f"- **Perakende fiyat:** {price:.2f} TL{suffix}")
     lines.extend(_safety_lines(drug))
     return "\n".join(lines) + _titck_disclaimer()
 
@@ -813,57 +660,6 @@ def get_drug_safety_status(
 
 
 # --------------------------------------------------------------------------- #
-# Price tool (pluggable barcode->TL source; see prices.py / build_prices.py)
-# --------------------------------------------------------------------------- #
-def _price_disclaimer() -> str:
-    info = prices.meta()
-    if info.get("sample"):
-        return (
-            "\n\n> ⚠️ **ÖRNEK FİYAT** (gerçek değil). Gerçek fiyat için "
-            "`scripts/build_prices.py` ile ticari bir barkod→TL dışa aktarımı "
-            "yükleyin.\n\n---\n*Fiyat kaynağı: " + str(info.get("source", "?")) + "*"
-        )
-    return (
-        f"\n\n---\n*Fiyat kaynağı: {info.get('source', '?')} "
-        f"({info.get('version', '?')}). Güncellik için kaynaktan teyit edin.*"
-    )
-
-
-@mcp.tool(annotations=_LOCAL_TOOL)
-def get_drug_price(
-    query: Annotated[str, Field(description="Drug name or barcode.")],
-) -> str:
-    """Get the TL price (retail/depot) for a Turkish drug by name or barcode.
-
-    Prices come from a pluggable commercial/pharmacy export loaded into
-    data/prices.json; if none is configured the tool says so.
-    """
-    if not prices.available():
-        return (
-            "Fiyat veri kaynağı yüklü değil. Ticari/eczane bir barkod→TL fiyat "
-            "dışa aktarımını `scripts/build_prices.py` ile ekleyin (bkz. README)."
-        )
-    drug = titck.resolve(query)
-    barcode = (
-        drug.get("barcode")
-        if drug
-        else (query.strip() if query.strip().isdigit() else None)
-    )
-    name = drug.get("name") if drug else query
-    entry = prices.lookup(barcode)
-    if not entry:
-        return f"'{query}' için fiyat bulunamadı."
-    lines = [f"# {name} — Fiyat"]
-    if barcode:
-        lines.append(f"- **Barkod:** {barcode}")
-    if entry.get("retail") is not None:
-        lines.append(f"- **Perakende (KDV dahil):** {entry['retail']:.2f} TL")
-    if entry.get("depot") is not None:
-        lines.append(f"- **Depocu satış:** {entry['depot']:.2f} TL")
-    return "\n".join(lines) + _price_disclaimer()
-
-
-# --------------------------------------------------------------------------- #
 # Discovery: static MCP server card. Registries (e.g. Smithery) read this when
 # live scanning is blocked. Served at /.well-known/mcp/server-card.json on the
 # HTTP transport.
@@ -932,12 +728,12 @@ def ilac_bilgisi(ilac: str) -> str:
 
 
 @mcp.prompt
-def muadil_ve_fiyat(ilac: str) -> str:
-    """Bir ilacın SGK geri ödeme durumunu ve en ucuz eşdeğerini bulur."""
+def muadil_ve_geri_odeme(ilac: str) -> str:
+    """Bir ilacın SGK geri ödeme durumunu ve eşdeğer (muadil) grubunu derler."""
     return (
         f"'{ilac}' için önce `get_reimbursement_status` ile SGK geri ödeme durumunu, "
-        "sonra `find_drug_equivalents` ile eşdeğer grubu ve en ucuz muadili getir. "
-        "Hangi muadilin en ekonomik olduğunu vurgula; resmî güncel listeden teyit "
+        "sonra `find_drug_equivalents` ile eşdeğer grubu ve muadilleri getir. "
+        "Geri ödeme kapsamını ve muadilleri özetle; resmî güncel listeden teyit "
         "gerektiğini belirt."
     )
 
@@ -965,9 +761,9 @@ def resource_server_info() -> str:
     return (
         "# Klinik MCP\n"
         "Türk hekim ve eczacılar için ilaç & klinik bilgi MCP sunucusu.\n\n"
-        "- **Araçlar:** 19 (openFDA, RxNorm/RxClass, PubMed, klinik hesaplayıcılar, "
-        "TİTCK SKRS, SGK EK-4/A, TİTCK güvenlik, TL fiyat).\n"
-        "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_fiyat`, `renal_doz_kontrol`.\n"
+        "- **Araçlar:** 15 (openFDA etiket/etkileşim/yan etki, RxClass/ATC, PubMed, "
+        "klinik hesaplayıcılar, TİTCK SKRS, SGK EK-4/A, TİTCK güvenlik).\n"
+        "- **Promptlar:** `ilac_bilgisi`, `muadil_ve_geri_odeme`, `renal_doz_kontrol`.\n"
         "- **Taşıma:** stdio (Claude Desktop) ve Streamable HTTP (ChatGPT / uzak).\n\n"
         "> Bilgiler yalnızca eğitim amaçlıdır, tıbbi tavsiye değildir."
     )
@@ -978,13 +774,12 @@ def resource_sources() -> str:
     """Veri kaynakları ve ne için kullanıldıkları."""
     return (
         "# Veri Kaynakları\n"
-        "- **openFDA** — ilaç etiketleri, yan etkiler (FAERS), geri çağırmalar.\n"
-        "- **NLM RxNorm / RxClass** — ad normalizasyonu, etken madde/marka, ilaç sınıfları.\n"
+        "- **openFDA** — ilaç etiketleri, etkileşimler, yan etkiler (FAERS).\n"
+        "- **NLM RxClass** — ilaç sınıfları (ATC dahil).\n"
         "- **PubMed (NCBI)** — tıbbi literatür.\n"
         "- **TİTCK SKRS** — Türk ruhsatlı ilaç kaydı (ad, barkod, ATC, firma, reçete).\n"
         "- **SGK EK-4/A** — geri ödeme, eşdeğer grup, barkod, kamu no.\n"
-        "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76).\n"
-        "- **Fiyat** — takılabilir barkod→TL kaynağı (yüklüyse)."
+        "- **TİTCK güvenlik** — ek izleme (dinamikmodul/57) + ruhsat iptali (dinamikmodul/76)."
     )
 
 
@@ -992,10 +787,9 @@ def resource_sources() -> str:
 def resource_versions() -> str:
     """Paketlenmiş yerel veri kümelerinin sürüm ve kayıt sayıları."""
     titck_meta, sgk_meta = titck.meta(), sgk.meta()
-    safety_meta, price_meta = safety.meta(), prices.meta()
+    safety_meta = safety.meta()
     monitoring = safety_meta.get("monitoring", {})
     cancellations = safety_meta.get("cancellations", {})
-    price_count = str(price_meta.get("count", "?")) if prices.available() else "yüklü değil"
     lines = [
         "# Yerel Veri Sürümleri",
         "| Veri kümesi | Sürüm | Kayıt |",
@@ -1004,6 +798,5 @@ def resource_versions() -> str:
         f"| SGK EK-4/A | {sgk_meta.get('version', '?')} | {sgk_meta.get('count', '?')} |",
         f"| Ek izleme | {monitoring.get('version', '?')} | {monitoring.get('count', '?')} |",
         f"| Ruhsat iptali | {cancellations.get('version', '?')} | {cancellations.get('count', '?')} |",
-        f"| Fiyat | {price_meta.get('version') or '—'} | {price_count} |",
     ]
     return "\n".join(lines)

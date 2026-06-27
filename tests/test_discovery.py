@@ -28,12 +28,12 @@ def test_health_endpoint_returns_ok():
     assert response.status_code == 200
     body = json.loads(response.body)
     assert body["status"] == "ok"
-    assert body["tool_count"] == 19
+    assert body["tool_count"] == 15
 
 
 def test_prompts_registered():
     names = {p.name for p in asyncio.run(server.mcp.list_prompts())}
-    assert {"ilac_bilgisi", "muadil_ve_fiyat", "renal_doz_kontrol"} <= names
+    assert {"ilac_bilgisi", "muadil_ve_geri_odeme", "renal_doz_kontrol"} <= names
 
 
 def test_resources_registered():

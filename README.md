@@ -16,7 +16,7 @@ pinned: false
 
 <p align="center">
   <b>Türk hekim ve eczacılar için ilaç &amp; klinik bilgi MCP sunucusu.</b><br>
-  TİTCK · SGK EK-4/A · openFDA · NLM RxNorm/RxClass · PubMed — tek araç setinde;
+  TİTCK · SGK EK-4/A · openFDA · NLM RxClass · PubMed — tek araç setinde;
   Claude ve ChatGPT ile çalışır.
 </p>
 
@@ -36,7 +36,7 @@ pinned: false
 
 Asistanına şöyle sor:
 
-- *“Parol'un SGK eşdeğeri ve en ucuz muadili nedir?”* → `find_drug_equivalents`
+- *“Parol'un SGK eşdeğeri (muadil) ve geri ödeme durumu nedir?”* → `find_drug_equivalents`
 - *“Glioscan ek izlemede mi, ruhsatı iptal mi?”* → `get_drug_safety_status`
 - *“Metformin'in FDA etiketinde uyarılar neler?”* → `get_drug_label`
 - *“70 yaş, 60 kg, kreatinin 1.4, kadın — kreatinin klerensi kaç?”* → `creatinine_clearance`
@@ -48,8 +48,8 @@ eğitimden tahmin değil.
 **Tek tıkla iş akışları (MCP Prompts):** istemcin (Claude / Cursor vb.) bunları
 hazır komut olarak gösterir:
 
-- `ilac_bilgisi` — TİTCK kaydı + güvenlik durumu + SGK eşdeğer/fiyatı, tek özette.
-- `muadil_ve_fiyat` — SGK geri ödeme + en ucuz muadil.
+- `ilac_bilgisi` — TİTCK kaydı + güvenlik durumu + SGK eşdeğer, tek özette.
+- `muadil_ve_geri_odeme` — SGK geri ödeme + eşdeğer (muadil) grubu.
 - `renal_doz_kontrol` — kreatinin klerensi hesabı + böbrek dozu hatırlatması.
 
 ## 👥 Kimler için?
@@ -57,7 +57,7 @@ hazır komut olarak gösterir:
 | Kullanıcı | Başla | Neden |
 | --- | --- | --- |
 | **Hekim** | `get_drug_label` · `creatinine_clearance` · `get_drug_safety_status` | Endikasyon/doz/uyarı + böbrek dozu + güvenlik bayrakları |
-| **Eczacı** | `find_drug_equivalents` · `get_reimbursement_status` · `get_drug_price` | Muadil + geri ödeme + (varsa) TL fiyat |
+| **Eczacı** | `find_drug_equivalents` · `get_reimbursement_status` · `get_drug_safety_status` | Muadil + geri ödeme + güvenlik durumu |
 | **Araştırmacı** | `search_medical_literature` · `get_drug_classes` · `find_drugs_for_condition` | PubMed + ilaç sınıfları + endikasyon ters arama |
 
 > Bu sunucu bir **klinik karar aracı değildir**; resmî kaynak teyidi ve
@@ -66,29 +66,25 @@ hazır komut olarak gösterir:
 ## Araçlar (Tools)
 
 <details>
-<summary><b>19 araç — tam listeyi açmak için tıkla</b></summary>
+<summary><b>15 araç — tam listeyi açmak için tıkla</b></summary>
 
 | Araç | Açıklama | Kaynak |
 | --- | --- | --- |
-| `search_drugs` | İlaç adıyla (yanlış yazımlar dâhil) arama, RxCUI çözümleme | RxNorm |
 | `get_drug_label` | Endikasyon, doz, uyarı, kontrendikasyon, etkileşim, yan etki | openFDA |
 | `get_drug_interactions` | Etiketteki ilaç etkileşimleri bölümü | openFDA |
 | `get_drug_adverse_events` | En sık bildirilen yan etkiler (FAERS) | openFDA |
-| `get_drug_recalls` | Geri çağırma (recall) kayıtları | openFDA |
-| `get_rxnorm_details` | Normalleştirme: etken madde ve marka adları | RxNorm |
 | `find_drugs_for_condition` | Hastalığa göre ilaç bulma (ters arama) | openFDA |
 | `get_drug_classes` | Terapötik / ATC / etki mekanizması sınıfları | RxClass |
 | `search_medical_literature` | PubMed'de tıbbi literatür araması | PubMed |
 | `creatinine_clearance` | Kreatinin klerensi (Cockcroft–Gault) | Formül |
 | `body_surface_area` | Vücut yüzey alanı (Mosteller) | Formül |
 | `pediatric_dose` | Kilo bazlı pediatrik doz hesabı | Formül |
-| `find_drug_equivalents` | Eşdeğer (muadil) grup + fiyat (en ucuz) | SGK EK-4/A |
+| `find_drug_equivalents` | Eşdeğer (muadil) grup | SGK EK-4/A |
 | `get_reimbursement_status` | Geri ödeme durumu (listede mi) | SGK EK-4/A |
 | `search_turkish_drugs` | Türk ilaç kaydı arama (ad) | TİTCK SKRS |
 | `get_turkish_drug_info` | İlaç bilgisi: ATC, firma, reçete türü | TİTCK SKRS |
 | `find_drugs_by_active_ingredient` | Aynı ATC (etkin madde) ilaçlar | TİTCK SKRS |
 | `get_drug_safety_status` | Ek izleme (▼) + ruhsat iptali | TİTCK |
-| `get_drug_price` | TL fiyat (perakende/depocu) | Ticari export |
 
 </details>
 
@@ -253,24 +249,5 @@ Haftalık zamanlamak için (yolları kendine göre düzenle):
 ```powershell
 schtasks /Create /SC WEEKLY /D MON /ST 03:00 /TN "health-mcp-update" /TR "C:\yol\.venv\Scripts\python.exe C:\yol\scripts\update_data.py"
 ```
-
-### 💰 TL fiyatı (takılabilir entegrasyon)
-
-Net TL perakende fiyatı **ücretsiz/public olarak yok** (SGK EK-4/A iskonto oranı,
-TİTCK yalnızca EUR referans). Bu yüzden fiyat **takılabilir** bir kaynaktan gelir:
-`get_drug_price` ve `find_drug_equivalents` (en ucuz eşdeğer), barkod→TL fiyatı
-[src/health_mcp/data/prices.json](src/health_mcp/data/prices.json)'dan okur.
-
-Varsayılan olarak **fiyat verisi gelmez** — hiçbir sahte değer gösterilmez; gerçek
-bir kaynak yüklenene kadar araçlar fiyatı sessizce atlar. Gerçek fiyatı yüklemek
-için herhangi bir ticari/eczane kaynağından (Rxmediapharma, eczane otomasyonu,
-ticari CSV) **barkod + perakende fiyat** dışa aktarıp:
-
-```powershell
-.\.venv\Scripts\python.exe scripts/build_prices.py "C:\yol\fiyatlar.csv" --source "Rxmediapharma" --version 2026-06
-```
-
-Script barkod/perakende/depocu sütunlarını otomatik bulur (CSV veya Excel). Fiyat
-kaynağı yoksa araçlar fiyatı sessizce atlar.
 
 </details>

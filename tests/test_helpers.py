@@ -25,18 +25,3 @@ def test_fmt_date():
     assert server._fmt_date("20260624") == "2026-06-24"
     assert server._fmt_date(None) == "?"
     assert server._fmt_date("notadate") == "notadate"
-
-
-def test_concepts_by_tty_filters_by_term_type():
-    group = {
-        "conceptGroup": [
-            {"tty": "IN", "conceptProperties": [{"name": "ibuprofen"}]},
-            {
-                "tty": "BN",
-                "conceptProperties": [{"name": "Advil"}, {"name": "Motrin"}],
-            },
-        ]
-    }
-    assert server._concepts_by_tty(group, "IN") == ["ibuprofen"]
-    assert server._concepts_by_tty(group, "BN") == ["Advil", "Motrin"]
-    assert server._concepts_by_tty(group, "SCD") == []

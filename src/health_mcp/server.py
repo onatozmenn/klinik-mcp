@@ -147,7 +147,12 @@ async def get_drug_label(
 async def get_drug_interactions(
     drug_name: Annotated[str, Field(description="Drug name (brand, generic, or active substance).")],
 ) -> str:
-    """Get the drug-interactions section from a drug's openFDA label."""
+    """Get the interactions section of ONE drug's openFDA label (free text).
+
+    Returns the single-drug interaction narrative from the US label. To check
+    whether TWO specific drugs interact (with a severity rating), use
+    `check_drug_interactions` instead.
+    """
     name = _clean(drug_name)
     if not name:
         return "Lütfen bir ilaç adı girin."
@@ -790,12 +795,15 @@ def check_drug_interactions(
     drug1: Annotated[str, Field(description="First drug — brand, active substance, or INN (Turkish or English).")],
     drug2: Annotated[str, Field(description="Second drug — brand, active substance, or INN (Turkish or English).")],
 ) -> str:
-    """İki ilaç arasındaki etkileşim şiddetini kontrol eder (DDInter 2.0).
+    """Check whether TWO specific drugs interact, with severity (DDInter 2.0).
 
-    Resolves each drug to a DDInter substance (synonym table, direct name, or a
-    TİTCK brand/active-name → ATC-substance bridge) and returns the pairwise
-    severity (Major / Moderate / Minor). A missing pair is reported as "no
-    recorded interaction", which does NOT prove the combination is safe.
+    USE THIS for questions like "can X and Y be taken together?", "does X
+    interact with Y?", or any two-drug combination/co-administration check.
+    Provide the two drug names (Turkish brand/active substance or English INN);
+    returns the pairwise severity — Major / Moderate / Minor — from DDInter,
+    bridging Turkish names through TİTCK. For ONE drug's full label interaction
+    text, use `get_drug_interactions` instead. A missing pair does NOT prove the
+    combination is safe.
     """
     if not _clean(drug1) or not _clean(drug2):
         return "Lütfen iki ilaç adı girin."

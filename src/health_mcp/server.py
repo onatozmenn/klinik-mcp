@@ -6,8 +6,11 @@ tools that Claude, ChatGPT and other MCP clients can call.
 from __future__ import annotations
 
 import asyncio
+from typing import Annotated
 
 from fastmcp import FastMCP
+from mcp.types import ToolAnnotations
+from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
@@ -101,10 +104,21 @@ def _concepts_by_tty(related_group: dict, tty: str) -> list[str]:
 
 
 # --------------------------------------------------------------------------- #
+# Tool behaviour hints — every tool is read-only & idempotent. "API" tools reach
+# external services (open world); "LOCAL" tools read bundled data / pure math.
+# --------------------------------------------------------------------------- #
+_API_TOOL = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=True)
+_LOCAL_TOOL = ToolAnnotations(readOnlyHint=True, idempotentHint=True, openWorldHint=False)
+
+
+# --------------------------------------------------------------------------- #
 # Tools
 # --------------------------------------------------------------------------- #
-@mcp.tool
-async def search_drugs(query: str, max_results: int = 10) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def search_drugs(
+    query: Annotated[str, Field(description="Drug name to search — brand, generic, or even misspelled.")],
+    max_results: Annotated[int, Field(description="Maximum number of results to return.")] = 10,
+) -> str:
     """Search for drugs by brand, generic, or even misspelled name.
 
     Returns matching RxNorm concepts with their RxCUI identifier, term type
@@ -152,8 +166,10 @@ async def search_drugs(query: str, max_results: int = 10) -> str:
     return "\n".join(lines) + DISCLAIMER
 
 
-@mcp.tool
-async def get_drug_label(drug_name: str) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_label(
+    drug_name: Annotated[str, Field(description="Drug name (brand, generic, or active substance).")],
+) -> str:
     """Get the official openFDA label for a drug.
 
     Includes indications, dosage & administration, warnings, contraindications,
@@ -187,8 +203,10 @@ async def get_drug_label(drug_name: str) -> str:
     return f"{header}\n\n{body}{DISCLAIMER}"
 
 
-@mcp.tool
-async def get_drug_interactions(drug_name: str) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_interactions(
+    drug_name: Annotated[str, Field(description="Drug name (brand, generic, or active substance).")],
+) -> str:
     """Get the drug-interactions section from a drug's openFDA label."""
     name = _clean(drug_name)
     if not name:
@@ -209,8 +227,11 @@ async def get_drug_interactions(drug_name: str) -> str:
     return f"# {drug_name} — İlaç Etkileşimleri\n\n{_truncate(text, 3000)}{DISCLAIMER}"
 
 
-@mcp.tool
-async def get_drug_adverse_events(drug_name: str, limit: int = 10) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_adverse_events(
+    drug_name: Annotated[str, Field(description="Drug name (brand, generic, or active substance).")],
+    limit: Annotated[int, Field(description="Maximum number of adverse-event terms to return.")] = 10,
+) -> str:
     """Get the most frequently reported adverse events for a drug (FAERS).
 
     Data comes from the openFDA adverse-event reporting system. Counts reflect
@@ -238,8 +259,11 @@ async def get_drug_adverse_events(drug_name: str, limit: int = 10) -> str:
     return "\n".join(lines) + DISCLAIMER
 
 
-@mcp.tool
-async def get_drug_recalls(query: str, limit: int = 10) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_recalls(
+    query: Annotated[str, Field(description="Drug or product name to search recalls for.")],
+    limit: Annotated[int, Field(description="Maximum number of recall records to return.")] = 10,
+) -> str:
     """Get drug recall / enforcement reports for a product from openFDA."""
     term = _clean(query)
     if not term:
@@ -265,8 +289,10 @@ async def get_drug_recalls(query: str, limit: int = 10) -> str:
     return "\n\n".join(blocks) + DISCLAIMER
 
 
-@mcp.tool
-async def get_rxnorm_details(drug_name: str) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_rxnorm_details(
+    drug_name: Annotated[str, Field(description="Drug name to normalize via RxNorm.")],
+) -> str:
     """Normalize a drug name and list its ingredients and brand names (RxNorm)."""
     name = _clean(drug_name)
     if not name:
@@ -301,8 +327,11 @@ async def get_rxnorm_details(drug_name: str) -> str:
     return "\n".join(lines) + DISCLAIMER
 
 
-@mcp.tool
-async def find_drugs_for_condition(condition: str, max_results: int = 10) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def find_drugs_for_condition(
+    condition: Annotated[str, Field(description="Condition/indication, e.g. 'hypertension' or 'migraine'.")],
+    max_results: Annotated[int, Field(description="Maximum number of drugs to return.")] = 10,
+) -> str:
     """Find drugs whose FDA labels list a given condition as an indication.
 
     Reverse lookup: given a condition (e.g. "hypertension", "migraine"), returns
@@ -329,8 +358,10 @@ async def find_drugs_for_condition(condition: str, max_results: int = 10) -> str
     return "\n".join(lines) + DISCLAIMER
 
 
-@mcp.tool
-async def get_drug_classes(drug_name: str) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def get_drug_classes(
+    drug_name: Annotated[str, Field(description="Drug name to look up therapeutic/ATC/mechanism classes for.")],
+) -> str:
     """List the therapeutic / ATC / mechanism classes a drug belongs to (RxClass)."""
     name = _clean(drug_name)
     if not name:
@@ -372,8 +403,11 @@ async def get_drug_classes(drug_name: str) -> str:
     return "\n".join(lines) + DISCLAIMER
 
 
-@mcp.tool
-async def search_medical_literature(query: str, max_results: int = 10) -> str:
+@mcp.tool(annotations=_API_TOOL)
+async def search_medical_literature(
+    query: Annotated[str, Field(description="Topic to search — drug, condition, or keyword.")],
+    max_results: Annotated[int, Field(description="Maximum number of articles to return.")] = 10,
+) -> str:
     """Search PubMed for medical literature on a drug, condition or topic."""
     term = _clean(query)
     if not term:
@@ -407,9 +441,12 @@ async def search_medical_literature(query: str, max_results: int = 10) -> str:
     return "\n\n".join(blocks) + DISCLAIMER
 
 
-@mcp.tool
+@mcp.tool(annotations=_LOCAL_TOOL)
 def creatinine_clearance(
-    age: float, weight_kg: float, serum_creatinine_mg_dl: float, sex: str
+    age: Annotated[float, Field(description="Patient age in years.")],
+    weight_kg: Annotated[float, Field(description="Body weight in kilograms.")],
+    serum_creatinine_mg_dl: Annotated[float, Field(description="Serum creatinine in mg/dL.")],
+    sex: Annotated[str, Field(description="Sex: 'kadın'/'female'/'f' or 'erkek'/'male'/'m'.")],
 ) -> str:
     """Estimate creatinine clearance (Cockcroft–Gault) for renal drug dosing.
 
@@ -437,8 +474,11 @@ def creatinine_clearance(
     )
 
 
-@mcp.tool
-def body_surface_area(height_cm: float, weight_kg: float) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def body_surface_area(
+    height_cm: Annotated[float, Field(description="Height in centimeters.")],
+    weight_kg: Annotated[float, Field(description="Body weight in kilograms.")],
+) -> str:
     """Body surface area (Mosteller formula) for BSA-based dosing."""
     try:
         bsa = clinical.mosteller_bsa(height_cm, weight_kg)
@@ -452,12 +492,12 @@ def body_surface_area(height_cm: float, weight_kg: float) -> str:
     )
 
 
-@mcp.tool
+@mcp.tool(annotations=_LOCAL_TOOL)
 def pediatric_dose(
-    weight_kg: float,
-    mg_per_kg_per_day: float,
-    doses_per_day: int = 1,
-    max_mg_per_day: float | None = None,
+    weight_kg: Annotated[float, Field(description="Child body weight in kilograms.")],
+    mg_per_kg_per_day: Annotated[float, Field(description="Dose rate in mg per kg per day, from a trusted reference.")],
+    doses_per_day: Annotated[int, Field(description="Number of divided doses per day.")] = 1,
+    max_mg_per_day: Annotated[float | None, Field(description="Optional maximum total daily dose (mg) to cap at.")] = None,
 ) -> str:
     """Weight-based pediatric dose calculator.
 
@@ -527,8 +567,11 @@ def _resolve_sgk(query: str) -> dict | None:
     return None
 
 
-@mcp.tool
-def find_drug_equivalents(drug: str, max_results: int = 25) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def find_drug_equivalents(
+    drug: Annotated[str, Field(description="Drug name or barcode.")],
+    max_results: Annotated[int, Field(description="Maximum number of equivalent drugs to list.")] = 25,
+) -> str:
     """Find SGK eşdeğer (bioequivalent) drugs for a drug name or barcode."""
     record = _resolve_sgk(drug)
     if not record:
@@ -570,8 +613,10 @@ def find_drug_equivalents(drug: str, max_results: int = 25) -> str:
     return "\n".join(lines) + _sgk_disclaimer()
 
 
-@mcp.tool
-def get_reimbursement_status(drug: str) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def get_reimbursement_status(
+    drug: Annotated[str, Field(description="Drug name or barcode.")],
+) -> str:
     """Check whether a drug is on the SGK reimbursement list (EK-4/A)."""
     record = _resolve_sgk(drug)
     if not record:
@@ -615,8 +660,11 @@ def _titck_fields(drug: dict) -> list[str]:
     return lines
 
 
-@mcp.tool
-def search_turkish_drugs(query: str, max_results: int = 15) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def search_turkish_drugs(
+    query: Annotated[str, Field(description="Drug name to search in the TİTCK registry.")],
+    max_results: Annotated[int, Field(description="Maximum number of results to return.")] = 15,
+) -> str:
     """Search Turkey's licensed drug registry (TİTCK SKRS) by drug name."""
     matches = titck.search_by_name(query, limit=max_results)
     if not matches:
@@ -634,8 +682,10 @@ def search_turkish_drugs(query: str, max_results: int = 15) -> str:
     return "\n".join(lines) + _titck_disclaimer()
 
 
-@mcp.tool
-def get_turkish_drug_info(query: str) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def get_turkish_drug_info(
+    query: Annotated[str, Field(description="Drug name or barcode.")],
+) -> str:
     """Get full TİTCK registry info for a Turkish drug by name or barcode."""
     drug = titck.resolve(query)
     if not drug:
@@ -649,8 +699,11 @@ def get_turkish_drug_info(query: str) -> str:
     return "\n".join(lines) + _titck_disclaimer()
 
 
-@mcp.tool
-def find_drugs_by_active_ingredient(query: str, max_results: int = 30) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def find_drugs_by_active_ingredient(
+    query: Annotated[str, Field(description="Drug name or barcode; its ATC code is used to find matches.")],
+    max_results: Annotated[int, Field(description="Maximum number of drugs to list.")] = 30,
+) -> str:
     """Find Turkish drugs sharing the same ATC code (same active substance/class)."""
     drug = titck.resolve(query)
     if not drug:
@@ -711,8 +764,10 @@ def _safety_lines(drug: dict) -> list[str]:
     return lines
 
 
-@mcp.tool
-def get_drug_safety_status(query: str) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def get_drug_safety_status(
+    query: Annotated[str, Field(description="Drug name or barcode.")],
+) -> str:
     """TİTCK güvenlik durumu: ek izleme (▼) ve ruhsat iptali. Ad veya barkod.
 
     Reports whether a Turkish drug is on TİTCK's additional-monitoring list and
@@ -774,8 +829,10 @@ def _price_disclaimer() -> str:
     )
 
 
-@mcp.tool
-def get_drug_price(query: str) -> str:
+@mcp.tool(annotations=_LOCAL_TOOL)
+def get_drug_price(
+    query: Annotated[str, Field(description="Drug name or barcode.")],
+) -> str:
     """Get the TL price (retail/depot) for a Turkish drug by name or barcode.
 
     Prices come from a pluggable commercial/pharmacy export loaded into

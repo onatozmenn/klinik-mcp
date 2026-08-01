@@ -49,13 +49,6 @@ async def adverse_event_counts(drug_name: str, limit: int = 10) -> list[dict]:
     return data.get("results", [])
 
 
-async def enforcement_reports(query: str, limit: int = 10) -> list[dict]:
-    """Return drug recall / enforcement reports matching a product name."""
-    params = _with_key({"search": f'product_description:"{query}"', "limit": limit})
-    data = await get_json(f"{BASE}/drug/enforcement.json", params)
-    return data.get("results", [])
-
-
 async def drugs_for_indication(condition: str, limit: int = 10) -> list[dict]:
     """Return generic drug names whose labels list a given indication."""
     params = _with_key(

@@ -3,8 +3,13 @@ from __future__ import annotations
 
 import httpx
 
+from .. import __version__
+
 DEFAULT_TIMEOUT = 20.0
-USER_AGENT = "klinik-mcp/0.1 (+https://huggingface.co/spaces/onatozmenn/klinik-mcp)"
+USER_AGENT = (
+    f"klinik-mcp/{__version__} "
+    "(+https://huggingface.co/spaces/onatozmenn/klinik-mcp)"
+)
 
 _LIMITS = httpx.Limits(max_keepalive_connections=10, max_connections=20)
 _client: httpx.AsyncClient | None = None

@@ -7,6 +7,8 @@ tools/prompts/resources for Claude, ChatGPT and other MCP clients.
 """
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Annotated
 
 from fastmcp import FastMCP
@@ -15,12 +17,23 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from . import clinical, foreign, interactions, safety, sgk, titck
-from .clients import kubkt, openfda, pubmed, rxnorm
+from . import __version__, clinical, foreign, interactions, safety, sgk, titck
+from .clients import http, kubkt, openfda, pubmed, rxnorm
 from .clients.http import APIError
+
+
+@asynccontextmanager
+async def _lifespan(_server: FastMCP) -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        await http.aclose()
+
 
 mcp = FastMCP(
     name="Klinik MCP",
+    version=__version__,
+    lifespan=_lifespan,
     instructions=(
         "Klinik MCP — drug & clinical information tools for Turkish physicians "
         "and pharmacists. Capabilities: (1) openFDA drug labels, adverse events "
@@ -78,6 +91,13 @@ def _fmt_date(value: str | None) -> str:
     if value and len(value) == 8 and value.isdigit():
         return f"{value[:4]}-{value[4:6]}-{value[6:]}"
     return value or "?"
+
+
+def _count(total: int, shown: int, unit: str = "ürün") -> str:
+    """Render the true total, flagging that the table below is truncated."""
+    if shown < total:
+        return f"**{total}** {unit} (ilk {shown} gösteriliyor)"
+    return f"**{total}** {unit}"
 
 
 def _label_header(openfda_info: dict, fallback: str) -> str:
@@ -420,6 +440,8 @@ def pediatric_dose(
     """
     if min(weight_kg, mg_per_kg_per_day) <= 0 or doses_per_day < 1:
         return "Geçersiz girdi: kilo ve doz pozitif, doz sayısı ≥1 olmalı."
+    if max_mg_per_day is not None and max_mg_per_day <= 0:
+        return "Geçersiz girdi: maksimum günlük doz pozitif olmalı."
     daily = weight_kg * mg_per_kg_per_day
     capped = max_mg_per_day is not None and daily > max_mg_per_day
     if capped:
@@ -495,14 +517,15 @@ def find_drug_equivalents(
             f"**{record.get('name')}** için tanımlı eşdeğer grubu yok."
             + _sgk_disclaimer()
         )
-    members = sgk.group_members(group)[:max_results]
+    members = sgk.group_members(group)
+    shown = members[:max_results]
     lines = [
         f"# {record.get('name')} — Eşdeğer İlaçlar",
-        f"**Eşdeğer grup:** `{group}` · **{len(members)}** ürün\n",
+        f"**Eşdeğer grup:** `{group}` · {_count(len(members), len(shown))}\n",
         "| İlaç | Barkod |",
         "| --- | --- |",
     ]
-    for member in members:
+    for member in shown:
         lines.append(
             f"| {member.get('name', '?')} | {member.get('barcode', '?')} |"
         )
@@ -603,14 +626,15 @@ def find_drugs_by_active_ingredient(
     atc = drug.get("atc_code")
     if not atc:
         return f"**{drug.get('name')}** için ATC kodu yok." + _titck_disclaimer()
-    members = titck.find_by_atc(atc)[:max_results]
+    members = titck.find_by_atc(atc)
+    shown = members[:max_results]
     lines = [
         f"# {drug.get('name')} — Aynı ATC ({atc})",
-        f"**{drug.get('atc_name', '')}** · {len(members)} ürün\n",
+        f"**{drug.get('atc_name', '')}** · {_count(len(members), len(shown))}\n",
         "| İlaç | Firma | Reçete |",
         "| --- | --- | --- |",
     ]
-    for member in members:
+    for member in shown:
         lines.append(
             f"| {member.get('name', '?')} | {member.get('company', '')} "
             f"| {member.get('prescription_type', '')} |"
@@ -621,6 +645,10 @@ def find_drugs_by_active_ingredient(
 # --------------------------------------------------------------------------- #
 # Turkey-specific tools — TİTCK 'Yurt Dışı Etkin Madde' (foreign-supply) list.
 # --------------------------------------------------------------------------- #
+# The bundled list is a few hundred substances, so this scans effectively all.
+_FOREIGN_SCAN_LIMIT = 1000
+
+
 def _foreign_disclaimer() -> str:
     info = foreign.meta()
     return (
@@ -641,7 +669,13 @@ def find_foreign_supply(
     with ATC, pharmaceutical form, prescription type and whether import needs
     TİTCK's written approval.
     """
-    matches = foreign.search_by_name(query, limit=max_results)
+    if not foreign.available():
+        return (
+            "TİTCK yurt dışı etkin madde verisi yüklü değil. `scripts/build_titck_"
+            "foreign_snapshot.py` ile yükleyin (bkz. README)."
+        )
+    # Scan the whole list so the reported total is real, then truncate for display.
+    matches = foreign.search_by_name(query, limit=_FOREIGN_SCAN_LIMIT)
     drug = titck.resolve(query)
     if drug and drug.get("atc_code"):
         seen = {m.get("code") for m in matches}
@@ -649,19 +683,19 @@ def find_foreign_supply(
             if entry.get("code") not in seen:
                 matches.append(entry)
                 seen.add(entry.get("code"))
-    matches = matches[:max_results]
     if not matches:
         return (
             f"'{query}' TİTCK Yurt Dışı Etkin Madde Listesi'nde bulunamadı."
             + _foreign_disclaimer()
         )
+    shown = matches[:max_results]
     lines = [
         f"# '{query}' — Yurt Dışı Etkin Madde",
-        f"**{len(matches)}** kayıt\n",
+        f"{_count(len(matches), len(shown), 'kayıt')}\n",
         "| Etkin madde | ATC | Form | Reçete | İthal |",
         "| --- | --- | --- | --- | --- |",
     ]
-    for substance in matches:
+    for substance in shown:
         ithal = (
             "yazılı onaysız ✓"
             if substance.get("import_without_approval")
@@ -854,7 +888,7 @@ def check_drug_interactions(
 # HTTP transport.
 # --------------------------------------------------------------------------- #
 SERVER_CARD = {
-    "serverInfo": {"name": "Klinik MCP", "version": "0.1.0"},
+    "serverInfo": {"name": "Klinik MCP", "version": __version__},
     "authentication": {"required": False},
 }
 
@@ -892,7 +926,7 @@ async def _health(request: Request) -> JSONResponse:
         {
             "status": "ok",
             "name": "Klinik MCP",
-            "version": "0.1.0",
+            "version": __version__,
             "tool_count": tool_count,
         }
     )

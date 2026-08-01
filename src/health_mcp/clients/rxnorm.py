@@ -26,23 +26,6 @@ async def rxcui_by_name(name: str) -> list[str]:
     return data.get("idGroup", {}).get("rxnormId", [])
 
 
-async def properties(rxcui: str) -> dict:
-    """Return the RxNorm concept properties (name, tty, ...) for an RxCUI."""
-    data = await get_json(f"{BASE}/rxcui/{rxcui}/properties.json")
-    if not data:
-        return {}
-    return data.get("properties", {})
-
-
-async def related(rxcui: str, ttys: list[str]) -> dict:
-    """Return related concepts (by term type) for an RxCUI."""
-    params = {"tty": " ".join(ttys)}
-    data = await get_json(f"{BASE}/rxcui/{rxcui}/related.json", params)
-    if not data:
-        return {}
-    return data.get("relatedGroup", {})
-
-
 RXCLASS_BASE = "https://rxnav.nlm.nih.gov/REST/rxclass"
 
 

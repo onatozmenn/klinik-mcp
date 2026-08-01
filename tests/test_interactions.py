@@ -33,6 +33,23 @@ def test_titck_brand_bridge():
     assert res["via"] == "titck"
 
 
+def test_bridge_accepts_name_prefix_on_word_boundary():
+    assert interactions.resolve("PAROL 500 MG")["name"] == "Acetaminophen"
+
+
+def test_bridge_accepts_barcode():
+    res = interactions.resolve("8699717010093")  # PAROL 500 MG 30 TABLET
+    assert res["name"] == "Acetaminophen"
+    assert res["via"] == "titck"
+
+
+def test_bridge_rejects_name_fragments():
+    # "ASP" is a substring of ASPIRIN and "A" of ALDARA; bridging either would
+    # answer an interaction question about a drug nobody asked for.
+    for fragment in ("ASP", "A", "pro", "sin", "SET"):
+        assert interactions.resolve(fragment) is None, fragment
+
+
 def test_resolve_unknown_returns_none():
     assert interactions.resolve("zzz nonexistent drug 999") is None
     assert interactions.resolve("") is None

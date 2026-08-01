@@ -1,3 +1,5 @@
-fastmcp>=2.0
-httpx>=0.27
-python-dotenv>=1.0
+# Pinned runtime lock for the container image; `pyproject.toml` holds the
+# supported ranges for library installs. Bump after the test suite passes.
+fastmcp==3.4.2
+httpx==0.28.1
+python-dotenv==1.2.2

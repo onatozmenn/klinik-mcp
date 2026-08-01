@@ -21,6 +21,7 @@ pinned: false
 </p>
 
 <p align="center">
+  <a href="https://github.com/onatozmenn/klinik-mcp/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/onatozmenn/klinik-mcp/actions/workflows/ci.yml/badge.svg"></a>
   <a href="https://smithery.ai/server/onatozmen44/klinik-mcp"><img alt="Smithery" src="https://img.shields.io/badge/Smithery-listed-ea580c"></a>
   <a href="https://github.com/onatozmenn/klinik-mcp"><img alt="GitHub" src="https://img.shields.io/badge/GitHub-source-181717?logo=github"></a>
   <a href="LICENSE"><img alt="MIT" src="https://img.shields.io/badge/license-MIT-22c55e"></a>

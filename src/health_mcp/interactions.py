@@ -8,6 +8,9 @@ Drug resolution is **exact** (normalized) only — never fuzzy — so each query
 maps to a single DDInter substance or is reported as unresolved. Turkish
 brand/active names are bridged through the TİTCK SKRS ATC substance name
 (``atc_name``), which is already an English INN for single-substance products.
+The bridge only accepts a TİTCK product the query actually names (full name,
+name prefix ending on a word boundary, or barcode), so a fragment such as "ASP"
+stays unresolved instead of silently becoming a different drug.
 """
 from __future__ import annotations
 
@@ -117,6 +120,20 @@ def _indices() -> tuple[
     return drugs, by_name, pair_map, alias
 
 
+def _identifies(record: dict, query_norm: str, digits: str) -> bool:
+    """True when the query names this TİTCK product rather than a fragment of it.
+
+    ``titck.search_by_name`` matches any substring, so "ASP" also hits "ASPIRIN
+    500 MG"; bridging on that would answer an interaction question about a drug
+    the caller never asked for. Only a full name, a name prefix that ends on a
+    word boundary ("PAROL" → "PAROL 500 MG TABLET"), or the barcode counts.
+    """
+    if digits and str(record.get("barcode", "")).strip() == digits:
+        return True
+    name = _normalize(record.get("name", ""))
+    return name == query_norm or name.startswith(query_norm + " ")
+
+
 def resolve(query: str) -> dict | None:
     """Resolve a query to a single DDInter substance, or ``None``.
 
@@ -133,6 +150,8 @@ def resolve(query: str) -> dict | None:
     if idx is not None:
         return {"name": drugs[idx], "index": idx, "via": "ddinter"}
 
+    text = str(query).strip()
+    digits = text if text.isdigit() else ""
     record = titck.resolve(query)
     candidates = []
     if record:
@@ -141,6 +160,8 @@ def resolve(query: str) -> dict | None:
     # "PAROL") is preferred over a combination that happened to match first.
     candidates.extend(titck.search_by_name(query, limit=10))
     for rec in candidates:
+        if not _identifies(rec, norm, digits):
+            continue
         atc_name = rec.get("atc_name") or ""
         atc_code = rec.get("atc_code") or ""
         # Only a 5th-level ATC code (7+ chars) denotes a single substance; skip

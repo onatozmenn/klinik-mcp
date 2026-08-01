@@ -19,3 +19,23 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+---
+
+THIRD-PARTY DATA
+
+The MIT license above covers this project's source code. Data files bundled
+under src/health_mcp/data/ come from third parties and keep their own terms:
+
+* ddinter_interactions.json — derived from DDInter 2.0
+  (https://ddinter.scbdd.com/), licensed CC BY-NC-SA 4.0. Non-commercial use
+  only, attribution required, and derivative datasets must be shared alike.
+  Commercial use of this project therefore requires removing this file or
+  obtaining a separate license from the DDInter authors.
+
+* titck_drugs.json, titck_safety.json, titck_foreign.json — derived from
+  public TİTCK lists (titck.gov.tr).
+
+* sgk_ek4a.json — derived from the SGK EK-4/A list published in the
+  consolidated SUT archive (sgk.gov.tr).
+

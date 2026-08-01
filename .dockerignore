@@ -18,6 +18,7 @@ dist/
 
 # Not needed at runtime
 scripts/
+.github/
 *.bak
 .vscode/
 .idea/

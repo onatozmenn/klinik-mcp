@@ -41,7 +41,10 @@ def main() -> None:
         "--transport",
         choices=["stdio", "http", "sse"],
         default=os.getenv("MCP_TRANSPORT", "stdio"),
-        help="Transport to use (default: stdio, for Claude Desktop).",
+        help=(
+            "Transport to use (default: stdio, for Claude Desktop). "
+            "'sse' is deprecated in the MCP spec; use 'http'."
+        ),
     )
     parser.add_argument(
         "--host",
